@@ -7,14 +7,23 @@ import sys
 import argparse
 import json
 import os
-from dotenv import load_dotenv
 from datetime import datetime
+
+# Aggiungi la directory corrente al path per importare i moduli
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from config import Config
 from offline_manager import OfflineManager
 from mqtt_client import MQTTClient
 from logger import AccessLogger
 
 def main():
+    # Controlla se siamo nella directory giusta
+    if not os.path.exists('src') or not os.path.exists('.env'):
+        print("❌ Errore: Eseguire dalla directory principale del progetto")
+        print("💡 Uso: cd /path/to/rfid_gate && python3 src/offline_utils.py --status")
+        sys.exit(1)
+    
     parser = argparse.ArgumentParser(description="Utilità Gestione Sistema Offline")
     parser.add_argument("--status", "-s", action="store_true",
                        help="Mostra stato sistema offline")
@@ -33,48 +42,66 @@ def main():
     
     args = parser.parse_args()
     
-    # Inizializza componenti base
-    logger = AccessLogger(Config.LOG_DIRECTORY)
-    
-    if args.test_connection:
-        test_connection()
+    # Se nessun argomento, mostra help
+    if not any(vars(args).values()):
+        parser.print_help()
         return
     
-    # Inizializza offline manager
-    mqtt_client = None
     try:
-        mqtt_client = MQTTClient()
-        mqtt_client.initialize()
-        mqtt_client.connect()
+        # Inizializza componenti base
+        print("🔧 Inizializzazione componenti...")
+        logger = AccessLogger(Config.LOG_DIRECTORY)
+        
+        if args.test_connection:
+            test_connection()
+            return
+        
+        # Inizializza offline manager
+        mqtt_client = None
+        try:
+            print("📡 Connessione MQTT...")
+            mqtt_client = MQTTClient()
+            mqtt_client.initialize()
+            mqtt_client.connect()
+        except Exception as e:
+            print(f"⚠️ MQTT non disponibile: {e}")
+        
+        print("🌐 Inizializzazione Offline Manager...")
+        offline_manager = OfflineManager(mqtt_client, logger)
+        offline_manager.initialize()
+        
+        if args.status:
+            show_status(offline_manager)
+        
+        if args.queue:
+            show_queue(offline_manager)
+        
+        if args.sync:
+            force_sync(offline_manager)
+        
+        if args.clear:
+            clear_queue(offline_manager)
+        
+        if args.export:
+            export_queue(offline_manager, args.export)
+        
+        if args.stats:
+            show_detailed_stats(offline_manager, logger)
+        
+        # Cleanup
+        if offline_manager:
+            offline_manager.cleanup()
+        if mqtt_client:
+            mqtt_client.disconnect()
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Operazione interrotta dall'utente")
+        sys.exit(0)
     except Exception as e:
-        print(f"⚠️ MQTT non disponibile: {e}")
-    
-    offline_manager = OfflineManager(mqtt_client, logger)
-    offline_manager.initialize()
-    
-    if args.status:
-        show_status(offline_manager)
-    
-    if args.queue:
-        show_queue(offline_manager)
-    
-    if args.sync:
-        force_sync(offline_manager)
-    
-    if args.clear:
-        clear_queue(offline_manager)
-    
-    if args.export:
-        export_queue(offline_manager, args.export)
-    
-    if args.stats:
-        show_detailed_stats(offline_manager, logger)
-    
-    # Cleanup
-    if offline_manager:
-        offline_manager.cleanup()
-    if mqtt_client:
-        mqtt_client.disconnect()
+        print(f"❌ Errore critico: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 def test_connection():
     """Testa la connessione internet e MQTT"""
