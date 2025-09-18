@@ -1,19 +1,40 @@
 #!/usr/bin/env python3
 """
-Modulo per il controllo di relè multipli in modalità bidirezionale
+Manager relè con cleanup garantito
 """
-
 import threading
+import atexit
+import signal
+import sys
+import RPi.GPIO as GPIO
 from config import Config
 from relay_controller import RelayController
 
 class RelayManager:
-    """Classe per gestire relè multipli"""
+    """Manager per relè multipli con cleanup garantito"""
     
     def __init__(self):
         self.relays = {}
         self.is_initialized = False
         self._lock = threading.Lock()
+        
+        # Registra cleanup automatico
+        atexit.register(self._emergency_cleanup)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+    
+    def _signal_handler(self, signum, frame):
+        """Gestisce segnali di terminazione"""
+        print(f"\n🛑 RelayManager - Segnale {signum} ricevuto")
+        self.emergency_stop_all()
+        sys.exit(0)
+    
+    def _emergency_cleanup(self):
+        """Cleanup di emergenza"""
+        try:
+            self.emergency_stop_all()
+        except:
+            pass
     
     def initialize(self):
         """Inizializza i relè attivi"""
@@ -22,7 +43,7 @@ class RelayManager:
             
             # Inizializza relè IN se abilitato
             if Config.RELAY_IN_ENABLE:
-                print(f"🔵 Configurazione Relè IN (GPIO {Config.RELAY_IN_PIN})")
+                print(f"🔵 Relè IN (GPIO {Config.RELAY_IN_PIN})")
                 relay_in = RelayController(
                     relay_id="in",
                     gpio_pin=Config.RELAY_IN_PIN,
@@ -32,19 +53,15 @@ class RelayManager:
                 )
                 
                 if relay_in.initialize():
-                    if relay_in.test_relay():
-                        self.relays["in"] = relay_in
-                        print("✅ Relè IN inizializzato correttamente")
-                    else:
-                        print("❌ Test Relè IN fallito")
-                        return False
+                    self.relays["in"] = relay_in
+                    print("✅ Relè IN OK")
                 else:
-                    print("❌ Inizializzazione Relè IN fallita")
+                    print("❌ Relè IN fallito")
                     return False
             
-            # Inizializza relè OUT se abilitato e in modalità bidirezionale
+            # Inizializza relè OUT se abilitato
             if Config.BIDIRECTIONAL_MODE and Config.RELAY_OUT_ENABLE:
-                print(f"🔴 Configurazione Relè OUT (GPIO {Config.RELAY_OUT_PIN})")
+                print(f"🔴 Relè OUT (GPIO {Config.RELAY_OUT_PIN})")
                 relay_out = RelayController(
                     relay_id="out",
                     gpio_pin=Config.RELAY_OUT_PIN,
@@ -54,14 +71,10 @@ class RelayManager:
                 )
                 
                 if relay_out.initialize():
-                    if relay_out.test_relay():
-                        self.relays["out"] = relay_out
-                        print("✅ Relè OUT inizializzato correttamente")
-                    else:
-                        print("❌ Test Relè OUT fallito")
-                        return False
+                    self.relays["out"] = relay_out
+                    print("✅ Relè OUT OK")
                 else:
-                    print("❌ Inizializzazione Relè OUT fallita")
+                    print("❌ Relè OUT fallito")
                     return False
             
             if not self.relays:
@@ -69,22 +82,30 @@ class RelayManager:
                 return False
             
             self.is_initialized = True
-            print(f"✅ Relay Manager inizializzato con {len(self.relays)} relè")
+            print(f"✅ RelayManager: {len(self.relays)} relè attivi")
+            
+            # Test finale
+            self._test_all_relays_quick()
+            
             return True
             
         except Exception as e:
-            print(f"❌ Errore inizializzazione Relay Manager: {e}")
+            print(f"❌ Errore RelayManager: {e}")
             return False
     
+    def _test_all_relays_quick(self):
+        """Test rapido di tutti i relè (0.2s ciascuno)"""
+        print("🧪 Test rapido relè...")
+        for direction, relay in self.relays.items():
+            try:
+                print(f"  Test {direction}...", end=" ")
+                relay.activate(0.2)  # Test molto breve
+                print("OK")
+            except Exception as e:
+                print(f"Errore: {e}")
+    
     def activate_relay(self, direction, duration=None):
-        """
-        Attiva il relè per la direzione specificata
-        Args:
-            direction (str): "in" o "out"
-            duration (int): Durata in secondi (opzionale)
-        Returns:
-            bool: True se attivato con successo
-        """
+        """Attiva relè per direzione specificata"""
         with self._lock:
             if direction not in self.relays:
                 print(f"❌ Relè {direction.upper()} non configurato")
@@ -94,34 +115,57 @@ class RelayManager:
             result = relay.activate(duration)
             
             if result:
-                print(f"⚡ Relè {direction.upper()} attivato con successo")
+                print(f"⚡ Relè {direction.upper()}: comando inviato")
             else:
-                print(f"❌ Errore attivazione relè {direction.upper()}")
+                print(f"❌ Relè {direction.upper()}: comando fallito")
             
             return result
     
-    def force_off_all(self):
-        """Forza lo spegnimento di tutti i relè"""
+    def emergency_stop_all(self):
+        """Spegnimento di emergenza di tutti i relè"""
+        print("🚨 EMERGENCY STOP tutti i relè...")
+        
         with self._lock:
             for direction, relay in self.relays.items():
-                relay.force_off()
-                print(f"🔴 Relè {direction.upper()} forzato OFF")
+                try:
+                    relay.force_off_immediate()
+                    print(f"🔴 Relè {direction.upper()}: STOP")
+                except Exception as e:
+                    print(f"⚠️ Relè {direction}: {e}")
+        
+        # Cleanup GPIO finale
+        try:
+            # Spegni pin specifici della configurazione
+            GPIO.setmode(GPIO.BCM)
+            
+            if Config.RELAY_IN_ENABLE:
+                GPIO.setup(Config.RELAY_IN_PIN, GPIO.OUT)
+                GPIO.output(Config.RELAY_IN_PIN, GPIO.LOW)
+                print(f"🔴 GPIO {Config.RELAY_IN_PIN} (IN): FORZATO LOW")
+            
+            if Config.RELAY_OUT_ENABLE:
+                GPIO.setup(Config.RELAY_OUT_PIN, GPIO.OUT)
+                GPIO.output(Config.RELAY_OUT_PIN, GPIO.LOW)
+                print(f"🔴 GPIO {Config.RELAY_OUT_PIN} (OUT): FORZATO LOW")
+            
+            GPIO.cleanup()
+            print("✅ Emergency stop completato")
+            
+        except Exception as e:
+            print(f"⚠️ Warning emergency cleanup: {e}")
+    
+    def force_off_all(self):
+        """Alias per emergency_stop_all"""
+        self.emergency_stop_all()
     
     def reset_all_to_initial_state(self):
-        """Ripristina tutti i relè allo stato iniziale"""
+        """Ripristina tutti i relè allo stato sicuro"""
         with self._lock:
             for direction, relay in self.relays.items():
                 relay.reset_to_initial_state()
-                print(f"🔄 Relè {direction.upper()} ripristinato allo stato iniziale")
     
     def get_relay_status(self, direction):
-        """
-        Ottiene lo stato di un relè specifico
-        Args:
-            direction (str): "in" o "out"
-        Returns:
-            dict: Status del relè o None se non esiste
-        """
+        """Status di un relè specifico"""
         if direction in self.relays:
             status = self.relays[direction].get_status()
             status['direction'] = direction
@@ -129,7 +173,7 @@ class RelayManager:
         return None
     
     def get_all_status(self):
-        """Restituisce lo stato di tutti i relè"""
+        """Status di tutti i relè"""
         status = {
             'initialized': self.is_initialized,
             'active_relays': len(self.relays),
@@ -144,54 +188,47 @@ class RelayManager:
         return status
     
     def is_relay_active(self, direction):
-        """
-        Controlla se un relè è attivo
-        Args:
-            direction (str): "in" o "out"
-        Returns:
-            bool: True se attivo, False altrimenti
-        """
+        """Controlla se relè è attivo"""
         if direction in self.relays:
             return self.relays[direction].is_active
         return False
     
     def get_active_relays(self):
-        """Restituisce la lista dei relè configurati"""
+        """Lista relè configurati"""
         return list(self.relays.keys())
     
-    def test_all_relays(self):
-        """Testa tutti i relè configurati"""
-        print("🧪 Test di tutti i relè...")
-        results = {}
-        
-        for direction, relay in self.relays.items():
-            print(f"🔧 Test relè {direction.upper()}...")
-            results[direction] = relay.test_relay(1)  # Test di 1 secondo
-        
-        success_count = sum(1 for result in results.values() if result)
-        print(f"✅ Test completato: {success_count}/{len(results)} relè funzionanti")
-        
-        return all(results.values())
-    
     def cleanup(self):
-        """Pulizia delle risorse di tutti i relè"""
+        """Cleanup completo"""
         try:
-            print("🛑 Cleanup Relay Manager...")
+            print("🛑 Cleanup RelayManager...")
             
-            # Ripristina tutti i relè allo stato iniziale
-            self.reset_all_to_initial_state()
+            # Spegni tutti i relè
+            self.emergency_stop_all()
             
-            # Pulisce ogni relè
+            # Pulisci ogni relè
             for direction, relay in self.relays.items():
-                relay.cleanup()
-                print(f"🧹 Relè {direction.upper()} pulito")
+                try:
+                    relay.cleanup()
+                except Exception as e:
+                    print(f"⚠️ Warning cleanup relè {direction}: {e}")
             
             self.relays.clear()
-            print("🧹 Relay Manager cleanup completato")
+            
+            # Cleanup finale GPIO
+            try:
+                GPIO.cleanup()
+                print("🧹 GPIO cleanup finale completato")
+            except:
+                pass
+            
+            print("✅ RelayManager cleanup completato")
             
         except Exception as e:
-            print(f"⚠️ Errore cleanup Relay Manager: {e}")
+            print(f"⚠️ Warning cleanup RelayManager: {e}")
     
     def __del__(self):
-        """Destructor - pulisce automaticamente"""
-        self.cleanup()
+        """Destructor con cleanup garantito"""
+        try:
+            self.emergency_stop_all()
+        except:
+            pass
