@@ -17,6 +17,7 @@ from relay_manager import RelayManager
 from mqtt_client import MQTTClient
 from logger import AccessLogger
 from offline_manager import OfflineManager
+from manual_control import ManualControl
 
 class BidirectionalAccessSystem:
     """Sistema principale di controllo accessi bidirezionale"""
@@ -27,6 +28,7 @@ class BidirectionalAccessSystem:
         self.mqtt_client = None
         self.logger = None
         self.offline_manager = None
+        self.manual_control = None
         self.running = False
         
         # Configura il gestore per Ctrl+C
@@ -142,6 +144,21 @@ class BidirectionalAccessSystem:
                 self.logger.log_system_event("offline_manager_error", str(e), "error")
             print("⚠️ Sistema continuerà senza fallback offline")
         
+        # Inizializza Manual Control
+        print("\n🔓 Inizializzazione Controllo Manuale...")
+        try:
+            self.manual_control = ManualControl(self.mqtt_client, self.relay_manager, self.logger)
+            if self.manual_control.initialize():
+                self.logger.log_system_event("manual_control_init", "Controllo manuale inizializzato")
+                print("✅ Controllo manuale attivato")
+            else:
+                print("⚠️ Controllo manuale non inizializzato")
+        except Exception as e:
+            print(f"⚠️ Errore Controllo Manuale: {e}")
+            if self.logger:
+                self.logger.log_system_event("manual_control_error", str(e), "warning")
+            print("⚠️ Sistema continuerà senza controllo manuale")
+        
         print("\n✅ Inizializzazione completata!")
         
         # Report finale configurazione
@@ -152,6 +169,14 @@ class BidirectionalAccessSystem:
                 print(f"🚪 Accesso offline: {'✅ Consentito' if offline_status['allow_offline_access'] else '❌ Negato'}")
         else:
             print("📊 Modalità offline: ❌ Non disponibile")
+        
+        if self.manual_control:
+            manual_status = self.manual_control.get_status()
+            print(f"🔓 Controllo manuale: {'✅ Attivo' if manual_status['enabled'] else '❌ Disattivo'}")
+            if manual_status['enabled']:
+                print(f"🔑 Auth richiesta: {'✅ Sì' if manual_status['config']['auth_required'] else '❌ No'}")
+        else:
+            print("🔓 Controllo manuale: ❌ Non disponibile")
         
         return True
     
@@ -184,25 +209,8 @@ class BidirectionalAccessSystem:
             print(f"📱 Lettori RFID attivi: {', '.join([r.upper() for r in active_readers])}")
             print(f"⚡ Relè attivi: {', '.join([r.upper() for r in active_relays])}")
             print("📡 Dati inviati via MQTT con TLS e autenticazione")
-            print("📝 Tutti gli accessi vengono registrati nei log")
-            print("⏹️  Premi Ctrl+C per uscire")
-            print("-"*80)
-            
-            # Mostra statistiche precedenti se disponibili
-            if os.path.exists(os.path.join(Config.LOG_DIRECTORY, "access_log.csv")):
-                self.logger.print_stats(7)
-        except Exception as e:
-            print(f"⚠️ Errore visualizzazione status: {e}")
-        
-        # Mostra configurazione attiva
-        try:
-            active_readers = self.rfid_manager.get_active_readers()
-            active_relays = self.relay_manager.get_active_relays()
-            
-            print(f"📱 Lettori RFID attivi: {', '.join([r.upper() for r in active_readers])}")
-            print(f"⚡ Relè attivi: {', '.join([r.upper() for r in active_relays])}")
-            print("📡 Dati inviati via MQTT con TLS e autenticazione")
             print("🌐 Modalità offline abilitata per continuità servizio")
+            print("🔓 Controllo manuale remoto e locale disponibile")
             print("📝 Tutti gli accessi vengono registrati nei log")
             print("⏹️  Premi Ctrl+C per uscire")
             print("-"*80)
@@ -211,13 +219,16 @@ class BidirectionalAccessSystem:
             if self.offline_manager:
                 offline_status = self.offline_manager.get_status()
                 connection_status = "🟢 Online" if offline_status['online'] else "🔴 Offline"
-                # Mostra status offline se disponibile
-            if self.offline_manager:
-                offline_status = self.offline_manager.get_status()
-                connection_status = "🟢 Online" if offline_status['online'] else "🔴 Offline"
                 print(f"🌐 Stato connessione: {connection_status}")
                 if offline_status['queue_size'] > 0:
                     print(f"📤 In coda per sync: {offline_status['queue_size']} elementi")
+            
+            # Mostra status controllo manuale
+            if self.manual_control:
+                manual_status = self.manual_control.get_status()
+                if manual_status['enabled']:
+                    mqtt_status = "🟢" if manual_status['mqtt_available'] else "🔴"
+                    print(f"🔓 Controllo manuale: {mqtt_status} {'Remoto+Locale' if manual_status['mqtt_available'] else 'Solo Locale'}")
             
             # Mostra statistiche precedenti se disponibili
             if os.path.exists(os.path.join(Config.LOG_DIRECTORY, "access_log.csv")):
@@ -451,15 +462,10 @@ class BidirectionalAccessSystem:
                 'bidirectional_mode': Config.BIDIRECTIONAL_MODE,
                 'auth_enabled': Config.AUTH_ENABLED,
                 'offline_enabled': Config.OFFLINE_MODE_ENABLED,
+                'manual_enabled': Config.MANUAL_OPEN_ENABLED,
                 'log_directory': Config.LOG_DIRECTORY
             }
         }
-        
-        # Status Offline Manager
-        if self.offline_manager:
-            status['offline_manager'] = self.offline_manager.get_status()
-        else:
-            status['offline_manager'] = None
         
         # Status RFID Manager
         if self.rfid_manager:
@@ -482,6 +488,18 @@ class BidirectionalAccessSystem:
             status['mqtt'] = self.mqtt_client.get_status()
         else:
             status['mqtt'] = None
+        
+        # Status Offline Manager
+        if self.offline_manager:
+            status['offline_manager'] = self.offline_manager.get_status()
+        else:
+            status['offline_manager'] = None
+        
+        # Status Manual Control
+        if self.manual_control:
+            status['manual_control'] = self.manual_control.get_status()
+        else:
+            status['manual_control'] = None
         
         return status
     
@@ -509,6 +527,16 @@ class BidirectionalAccessSystem:
                     self.logger.log_system_event("rfid_manager_stop", "Thread RFID fermati")
             except Exception as e:
                 print(f"⚠️ Errore stop RFID Manager: {e}")
+        
+        # Ferma Controllo Manuale
+        if self.manual_control:
+            try:
+                self.manual_control.cleanup()
+                if self.logger:
+                    manual_stats = self.manual_control.get_stats()
+                    self.logger.log_system_event("manual_control_stop", f"Controllo manuale fermato - {manual_stats['manual_opens']} aperture manuali eseguite")
+            except Exception as e:
+                print(f"⚠️ Errore stop Controllo Manuale: {e}")
         
         # Ferma Offline Manager
         if self.offline_manager:
@@ -594,6 +622,13 @@ def print_startup_info():
         print(f"      └─ Accesso offline: {'Consentito' if Config.OFFLINE_ALLOW_ACCESS else 'Negato'}")
     else:
         print("   🌐 Fallback Offline: DISATTIVO")
+    
+    # Mostra info controllo manuale
+    if Config.MANUAL_OPEN_ENABLED:
+        print("   🔓 Controllo manuale: ATTIVO")
+        print(f"      └─ Auth richiesta: {'Sì' if Config.MANUAL_OPEN_AUTH_REQUIRED else 'No'}")
+    else:
+        print("   🔓 Controllo manuale: DISATTIVO")
     
     print("")
 

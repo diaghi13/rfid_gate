@@ -57,6 +57,13 @@ class Config:
     AUTH_TIMEOUT = int(os.getenv('AUTH_TIMEOUT', 5))
     AUTH_TOPIC_SUFFIX = os.getenv('AUTH_TOPIC_SUFFIX', 'auth_response')
     
+    # Configurazioni Apertura Manuale
+    MANUAL_OPEN_ENABLED = os.getenv('MANUAL_OPEN_ENABLED', 'True').lower() == 'true'
+    MANUAL_OPEN_TOPIC_SUFFIX = os.getenv('MANUAL_OPEN_TOPIC_SUFFIX', 'manual_open')
+    MANUAL_OPEN_RESPONSE_TOPIC_SUFFIX = os.getenv('MANUAL_OPEN_RESPONSE_TOPIC_SUFFIX', 'manual_response')
+    MANUAL_OPEN_TIMEOUT = int(os.getenv('MANUAL_OPEN_TIMEOUT', 10))
+    MANUAL_OPEN_AUTH_REQUIRED = os.getenv('MANUAL_OPEN_AUTH_REQUIRED', 'True').lower() == 'true'
+    
     # Configurazioni Fallback Offline
     OFFLINE_MODE_ENABLED = os.getenv('OFFLINE_MODE_ENABLED', 'True').lower() == 'true'
     OFFLINE_ALLOW_ACCESS = os.getenv('OFFLINE_ALLOW_ACCESS', 'True').lower() == 'true'
@@ -81,6 +88,16 @@ class Config:
     def get_auth_response_topic(cls):
         """Genera il topic per le risposte di autenticazione"""
         return f"gate/{cls.TORNELLO_ID}/{cls.AUTH_TOPIC_SUFFIX}"
+    
+    @classmethod
+    def get_manual_open_topic(cls):
+        """Genera il topic per i comandi di apertura manuale"""
+        return f"gate/{cls.TORNELLO_ID}/{cls.MANUAL_OPEN_TOPIC_SUFFIX}"
+    
+    @classmethod
+    def get_manual_response_topic(cls):
+        """Genera il topic per le risposte di apertura manuale"""
+        return f"gate/{cls.TORNELLO_ID}/{cls.MANUAL_OPEN_RESPONSE_TOPIC_SUFFIX}"
     
     @classmethod
     def validate_config(cls):
@@ -175,6 +192,12 @@ class Config:
         if cls.AUTH_ENABLED:
             print(f"      └─ Timeout: {cls.AUTH_TIMEOUT}s")
         
+        # Configurazione Apertura Manuale
+        print(f"   🔓 Apertura manuale: {'Attiva' if cls.MANUAL_OPEN_ENABLED else 'Disattiva'}")
+        if cls.MANUAL_OPEN_ENABLED:
+            print(f"      └─ Auth richiesta: {'Sì' if cls.MANUAL_OPEN_AUTH_REQUIRED else 'No'}")
+            print(f"      └─ Timeout: {cls.MANUAL_OPEN_TIMEOUT}s")
+        
         # Configurazione Offline
         print(f"   🌐 Fallback Offline: {'Attivo' if cls.OFFLINE_MODE_ENABLED else 'Disattivo'}")
         if cls.OFFLINE_MODE_ENABLED:
@@ -186,3 +209,6 @@ class Config:
         print(f"   📍 Topic badge: {cls.get_mqtt_topic()}")
         if cls.AUTH_ENABLED:
             print(f"   📍 Topic auth: {cls.get_auth_response_topic()}")
+        if cls.MANUAL_OPEN_ENABLED:
+            print(f"   📍 Topic manual: {cls.get_manual_open_topic()}")
+            print(f"   📍 Topic manual response: {cls.get_manual_response_topic()}")

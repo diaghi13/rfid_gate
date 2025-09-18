@@ -106,7 +106,14 @@ class MQTTClient:
             if Config.AUTH_ENABLED:
                 auth_topic = Config.get_auth_response_topic()
                 client.subscribe(auth_topic, qos=1)
-                print(f"📬 Sottoscritto al topic: {auth_topic}")
+                print(f"📬 Sottoscritto al topic auth: {auth_topic}")
+            
+            # Sottoscrive al topic di apertura manuale se abilitata
+            if Config.MANUAL_OPEN_ENABLED:
+                manual_topic = Config.get_manual_open_topic()
+                client.subscribe(manual_topic, qos=1)
+                print(f"📬 Sottoscritto al topic manual: {manual_topic}")
+                
         else:
             self.is_connected = False
             error_messages = {
@@ -130,6 +137,8 @@ class MQTTClient:
             # Gestisce risposte di autenticazione
             if topic == Config.get_auth_response_topic():
                 self._handle_auth_response(payload)
+            # I messaggi di apertura manuale vengono gestiti dal ManualControl
+            # attraverso il callback specifico registrato
             
         except Exception as e:
             print(f"❌ Errore elaborazione messaggio: {e}")
