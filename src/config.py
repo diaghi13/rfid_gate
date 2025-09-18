@@ -57,6 +57,15 @@ class Config:
     AUTH_TIMEOUT = int(os.getenv('AUTH_TIMEOUT', 5))
     AUTH_TOPIC_SUFFIX = os.getenv('AUTH_TOPIC_SUFFIX', 'auth_response')
     
+    # Configurazioni Fallback Offline
+    OFFLINE_MODE_ENABLED = os.getenv('OFFLINE_MODE_ENABLED', 'True').lower() == 'true'
+    OFFLINE_ALLOW_ACCESS = os.getenv('OFFLINE_ALLOW_ACCESS', 'True').lower() == 'true'
+    OFFLINE_SYNC_ENABLED = os.getenv('OFFLINE_SYNC_ENABLED', 'True').lower() == 'true'
+    OFFLINE_STORAGE_FILE = os.getenv('OFFLINE_STORAGE_FILE', 'offline_queue.json')
+    OFFLINE_MAX_QUEUE_SIZE = int(os.getenv('OFFLINE_MAX_QUEUE_SIZE', 1000))
+    CONNECTION_CHECK_INTERVAL = int(os.getenv('CONNECTION_CHECK_INTERVAL', 30))
+    CONNECTION_RETRY_ATTEMPTS = int(os.getenv('CONNECTION_RETRY_ATTEMPTS', 3))
+    
     # Configurazioni Logging
     LOG_DIRECTORY = os.getenv('LOG_DIRECTORY', 'logs')
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -165,6 +174,13 @@ class Config:
         print(f"   🔐 Autenticazione: {'Attiva' if cls.AUTH_ENABLED else 'Disattiva'}")
         if cls.AUTH_ENABLED:
             print(f"      └─ Timeout: {cls.AUTH_TIMEOUT}s")
+        
+        # Configurazione Offline
+        print(f"   🌐 Fallback Offline: {'Attivo' if cls.OFFLINE_MODE_ENABLED else 'Disattivo'}")
+        if cls.OFFLINE_MODE_ENABLED:
+            print(f"      └─ Accesso offline: {'Consentito' if cls.OFFLINE_ALLOW_ACCESS else 'Negato'}")
+            print(f"      └─ Sync automatica: {'Attiva' if cls.OFFLINE_SYNC_ENABLED else 'Disattiva'}")
+            print(f"      └─ Max coda: {cls.OFFLINE_MAX_QUEUE_SIZE} elementi")
         
         print(f"   📝 Log Directory: {cls.LOG_DIRECTORY}")
         print(f"   📍 Topic badge: {cls.get_mqtt_topic()}")
