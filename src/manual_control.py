@@ -146,13 +146,31 @@ class ManualControl:
                 
                 print(f"🔓 APERTURA MANUALE - Direzione: {direction.upper()}, Durata: {duration}s")
                 
+                # Verifica che il relè non sia già attivo
+                if self.relay_manager.is_relay_active(direction):
+                    print(f"⚠️ Relè {direction} già attivo, aspetto che finisca...")
+                    # Aspetta che il relè corrente finisca (max 10 secondi)
+                    for i in range(10):
+                        time.sleep(1)
+                        if not self.relay_manager.is_relay_active(direction):
+                            break
+                    else:
+                        print(f"❌ Relè {direction} bloccato, forzo spegnimento")
+                        # Forza spegnimento del relè bloccato
+                        relay = self.relay_manager.relays.get(direction)
+                        if relay:
+                            relay.force_off()
+                
                 # Attiva il relè
+                print(f"⚡ Attivazione relè {direction.upper()}...")
                 success = self.relay_manager.activate_relay(direction, duration)
                 
                 if success:
                     # Aggiorna statistiche
                     self.stats['manual_opens'] += 1
                     self.stats['last_manual_open'] = datetime.now().isoformat()
+                    
+                    print(f"✅ Apertura manuale eseguita - Relè attivo per {duration}s")
                     
                     # Log evento
                     if self.logger:
@@ -161,7 +179,21 @@ class ManualControl:
                             f"Apertura manuale - User: {user_id}, Dir: {direction}, Durata: {duration}s, ID: {command_id}"
                         )
                     
-                    print(f"✅ Apertura manuale eseguita con successo")
+                    # Verifica che il relè si spenga dopo il tempo specificato
+                    def verify_relay_off():
+                        time.sleep(duration + 1)  # Aspetta durata + 1 secondo
+                        if self.relay_manager.is_relay_active(direction):
+                            print(f"⚠️ Relè {direction} ancora attivo dopo {duration}s, forzo spegnimento")
+                            relay = self.relay_manager.relays.get(direction)
+                            if relay:
+                                relay.force_off()
+                                print(f"🔴 Relè {direction} forzato OFF")
+                    
+                    # Avvia verifica in thread separato
+                    import threading
+                    verify_thread = threading.Thread(target=verify_relay_off, daemon=True)
+                    verify_thread.start()
+                    
                     return True
                 else:
                     self.stats['failed_attempts'] += 1
@@ -171,6 +203,17 @@ class ManualControl:
         except Exception as e:
             print(f"❌ Errore esecuzione apertura manuale: {e}")
             self.stats['failed_attempts'] += 1
+            
+            # Fallback di sicurezza: forza spegnimento
+            try:
+                if self.relay_manager and direction in self.relay_manager.get_active_relays():
+                    relay = self.relay_manager.relays.get(direction)
+                    if relay:
+                        relay.force_off()
+                        print(f"🔴 Fallback: Relè {direction} forzato OFF")
+            except Exception as cleanup_error:
+                print(f"⚠️ Errore cleanup relè: {cleanup_error}")
+            
             return False
     
     def _send_manual_response(self, command_id, success, message, user_id):

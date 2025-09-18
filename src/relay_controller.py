@@ -101,26 +101,42 @@ class RelayController:
     
     def _activate_thread(self, duration):
         """Thread per l'attivazione temporizzata del relè"""
+        thread_id = threading.current_thread().name
+        print(f"🔧 Thread relè {self.relay_id} avviato: {thread_id}")
+        
         with self._lock:
             self.is_active = True
         
         try:
             # Attiva il relè
             self._set_relay_state(True)
-            print(f"⚡ Relè {self.relay_id} ATTIVATO!")
+            print(f"⚡ Relè {self.relay_id} ATTIVATO! (Thread: {thread_id})")
             
             # Aspetta la durata specificata
+            start_time = time.time()
+            print(f"⏱️ Aspetto {duration}s per spegnimento automatico...")
             time.sleep(duration)
+            elapsed = time.time() - start_time
             
             # Disattiva il relè
             self._set_relay_state(False)
-            print(f"🔴 Relè {self.relay_id} disattivato")
+            print(f"🔴 Relè {self.relay_id} disattivato dopo {elapsed:.1f}s (Thread: {thread_id})")
+            
+            # Verifica che sia effettivamente spento
+            time.sleep(0.1)  # Piccola pausa per stabilizzazione
             
         except Exception as e:
             print(f"❌ Errore nel thread relè {self.relay_id}: {e}")
+            # Forza spegnimento in caso di errore
+            try:
+                self._set_relay_state(False)
+                print(f"🔴 Relè {self.relay_id} forzato OFF dopo errore")
+            except Exception as force_error:
+                print(f"❌ Errore critico spegnimento relè {self.relay_id}: {force_error}")
         finally:
             with self._lock:
                 self.is_active = False
+            print(f"✅ Thread relè {self.relay_id} terminato: {thread_id}")
     
     def _set_relay_state(self, active):
         """
@@ -154,8 +170,55 @@ class RelayController:
                 self.is_active = False
             print(f"🔄 Relè {self.relay_id} ripristinato allo stato iniziale: {self.initial_state}")
     
-    def get_status(self):
+    def get_gpio_state(self):
+        """Legge lo stato effettivo del GPIO"""
+        try:
+            # Legge lo stato del pin GPIO
+            import RPi.GPIO as GPIO
+            GPIO.setmode(GPIO.BCM)
+            state = GPIO.input(self.gpio_pin)
+            return "HIGH" if state else "LOW"
+        except Exception as e:
+            print(f"❌ Errore lettura GPIO {self.gpio_pin}: {e}")
+            return "UNKNOWN"
+    
+    def force_off_with_verification(self):
+        """Forza lo spegnimento del relè con verifica"""
+        print(f"🔴 Forzando spegnimento relè {self.relay_id}...")
+        
+        if self.is_initialized:
+            try:
+                # Forza stato OFF
+                self._set_relay_state(False)
+                
+                # Aspetta stabilizzazione
+                time.sleep(0.1)
+                
+                # Verifica stato GPIO
+                gpio_state = self.get_gpio_state()
+                expected_off_state = "LOW" if not self.active_low else "HIGH"
+                
+                print(f"📊 Stato GPIO {self.gpio_pin}: {gpio_state} (Atteso OFF: {expected_off_state})")
+                
+                with self._lock:
+                    self.is_active = False
+                
+                if gpio_state == expected_off_state:
+                    print(f"✅ Relè {self.relay_id} spento correttamente")
+                    return True
+                else:
+                    print(f"⚠️ Relè {self.relay_id} potrebbe essere ancora attivo!")
+                    return False
+                    
+            except Exception as e:
+                print(f"❌ Errore spegnimento forzato relè {self.relay_id}: {e}")
+                return False
+        
+        return False
         """Restituisce lo stato attuale del relè"""
+    def get_status(self):
+        """Restituisce lo stato del relè"""
+        gpio_state = self.get_gpio_state()
         return {
             'relay_id': self.relay_id,
             'initialized': self.is_initialized,
@@ -163,7 +226,8 @@ class RelayController:
             'pin': self.gpio_pin,
             'active_low': self.active_low,
             'initial_state': self.initial_state,
-            'duration': self.active_time
+            'duration': self.active_time,
+            'gpio_state': gpio_state
         }
     
     def cleanup(self):
