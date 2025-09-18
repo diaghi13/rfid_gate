@@ -72,7 +72,7 @@ class RelayController:
     def activate(self, duration=None):
         """
         Attiva il relè per la durata specificata
-        Args: duration (int) - Durata in secondi (usa Config.RELAY_ACTIVE_TIME se None)
+        Args: duration (int) - Durata in secondi (usa self.active_time se None)
         """
         if not self.is_initialized:
             print("❌ Relè non inizializzato")
@@ -84,59 +84,73 @@ class RelayController:
             if self.is_active:
                 print(f"⚠️ Relè {self.relay_id} già attivo, ignoro il comando")
                 return False
+            
+            # Marca come attivo PRIMA di avviare il thread
+            self.is_active = True
         
         try:
             print(f"\n🔛 Attivazione relè {self.relay_id} per {duration} secondi...")
             
-            # Attiva il relè in un thread separato per non bloccare
-            thread = threading.Thread(target=self._activate_thread, args=(duration,))
-            thread.daemon = True
-            thread.start()
+            # NON usare thread separato per evitare problemi di concorrenza
+            # Esegui direttamente in modo sincrono
+            self._execute_relay_activation(duration)
             
             return True
             
         except Exception as e:
             print(f"❌ Errore attivazione relè {self.relay_id}: {e}")
+            with self._lock:
+                self.is_active = False
             return False
     
-    def _activate_thread(self, duration):
-        """Thread per l'attivazione temporizzata del relè"""
-        thread_id = threading.current_thread().name
-        print(f"🔧 Thread relè {self.relay_id} avviato: {thread_id}")
-        
-        with self._lock:
-            self.is_active = True
-        
+    def _execute_relay_activation(self, duration):
+        """Esegue l'attivazione del relè in modo sincrono"""
         try:
             # Attiva il relè
             self._set_relay_state(True)
-            print(f"⚡ Relè {self.relay_id} ATTIVATO! (Thread: {thread_id})")
+            print(f"⚡ Relè {self.relay_id} ATTIVATO!")
             
             # Aspetta la durata specificata
             start_time = time.time()
             print(f"⏱️ Aspetto {duration}s per spegnimento automatico...")
-            time.sleep(duration)
-            elapsed = time.time() - start_time
+            
+            # Sleep con controllo periodico
+            sleep_interval = 0.1
+            elapsed = 0
+            
+            while elapsed < duration:
+                time.sleep(sleep_interval)
+                elapsed = time.time() - start_time
+                
+                # Controlla se dobbiamo fermarci anticipatamente
+                with self._lock:
+                    if not self.is_active:
+                        print(f"🛑 Relè {self.relay_id} fermato anticipatamente")
+                        break
             
             # Disattiva il relè
             self._set_relay_state(False)
-            print(f"🔴 Relè {self.relay_id} disattivato dopo {elapsed:.1f}s (Thread: {thread_id})")
+            print(f"🔴 Relè {self.relay_id} disattivato dopo {elapsed:.1f}s")
             
             # Verifica che sia effettivamente spento
-            time.sleep(0.1)  # Piccola pausa per stabilizzazione
+            time.sleep(0.1)
+            gpio_state = self.get_gpio_state()
+            expected_off_state = "LOW" if not self.active_low else "HIGH"
+            
+            if gpio_state != expected_off_state:
+                print(f"⚠️ GPIO {self.gpio_pin} non nello stato atteso! Attuale: {gpio_state}, Atteso: {expected_off_state}")
+                # Riprova una volta
+                self._set_relay_state(False)
+                time.sleep(0.1)
+                gpio_state = self.get_gpio_state()
+                print(f"🔄 Dopo secondo tentativo: {gpio_state}")
             
         except Exception as e:
-            print(f"❌ Errore nel thread relè {self.relay_id}: {e}")
-            # Forza spegnimento in caso di errore
-            try:
-                self._set_relay_state(False)
-                print(f"🔴 Relè {self.relay_id} forzato OFF dopo errore")
-            except Exception as force_error:
-                print(f"❌ Errore critico spegnimento relè {self.relay_id}: {force_error}")
+            print(f"❌ Errore durante attivazione relè {self.relay_id}: {e}")
         finally:
             with self._lock:
                 self.is_active = False
-            print(f"✅ Thread relè {self.relay_id} terminato: {thread_id}")
+            print(f"✅ Attivazione relè {self.relay_id} terminata")
     
     def _set_relay_state(self, active):
         """
@@ -145,9 +159,12 @@ class RelayController:
         """
         if active:
             state = GPIO.LOW if self.active_low else GPIO.HIGH
+            action = "ATTIVAZIONE"
         else:
             state = GPIO.HIGH if self.active_low else GPIO.LOW
+            action = "DISATTIVAZIONE"
         
+        print(f"🔧 {action} relè {self.relay_id}: GPIO {self.gpio_pin} = {'HIGH' if state else 'LOW'}")
         GPIO.output(self.gpio_pin, state)
     
     def force_off(self):
@@ -234,9 +251,19 @@ class RelayController:
         """Pulizia delle risorse GPIO"""
         try:
             if self.is_initialized:
-                # Ripristina lo stato iniziale invece di forzare OFF
+                print(f"🧹 Cleanup relè {self.relay_id}...")
+                
+                # Ferma qualsiasi attivazione in corso
+                with self._lock:
+                    self.is_active = False
+                
+                # Aspetta un momento per stabilizzazione
+                time.sleep(0.2)
+                
+                # Ripristina lo stato iniziale
                 self.reset_to_initial_state()
-                # Non facciamo GPIO.cleanup() qui perché potrebbe interferire con RFID
+                
+                # NON fare GPIO.cleanup() qui per evitare interferenze
                 print(f"🧹 Relè {self.relay_id} cleanup completato")
         except Exception as e:
             print(f"⚠️ Warning cleanup relè {self.relay_id}: {e}")
