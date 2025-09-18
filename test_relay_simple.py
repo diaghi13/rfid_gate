@@ -87,7 +87,7 @@ def test_manual_simple():
                 relay.force_off_with_verification()
             elif final_status['gpio_state'] == "HIGH":
                 print("❌ PROBLEMA: GPIO ancora HIGH!")
-                relay.force_off()
+                relay.force_off_with_verification()
             else:
                 print("✅ TEST SUPERATO: Relè spento correttamente")
         else:
