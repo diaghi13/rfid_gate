@@ -22,13 +22,18 @@ class RelayController:
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(Config.RELAY_PIN, GPIO.OUT)
             
-            # Imposta lo stato iniziale (relè spento)
-            initial_state = GPIO.HIGH if Config.RELAY_ACTIVE_LOW else GPIO.LOW
+            # Imposta lo stato iniziale configurabile
+            if Config.RELAY_INITIAL_STATE == 'HIGH':
+                initial_state = GPIO.HIGH
+            else:  # Default LOW
+                initial_state = GPIO.LOW
+            
             GPIO.output(Config.RELAY_PIN, initial_state)
             
             self.is_initialized = True
             print(f"🔌 Relè configurato su GPIO {Config.RELAY_PIN}")
             print(f"⚙️  Logica: {'Attivo LOW' if Config.RELAY_ACTIVE_LOW else 'Attivo HIGH'}")
+            print(f"🔄 Stato iniziale: {Config.RELAY_INITIAL_STATE} ({'HIGH' if initial_state else 'LOW'})")
             return True
             
         except Exception as e:
@@ -132,6 +137,18 @@ class RelayController:
                 self.is_active = False
             print("🔴 Relè forzato OFF")
     
+    def reset_to_initial_state(self):
+        """Ripristina il relè allo stato iniziale configurato"""
+        if self.is_initialized:
+            if Config.RELAY_INITIAL_STATE == 'HIGH':
+                GPIO.output(Config.RELAY_PIN, GPIO.HIGH)
+            else:
+                GPIO.output(Config.RELAY_PIN, GPIO.LOW)
+            
+            with self._lock:
+                self.is_active = False
+            print(f"🔄 Relè ripristinato allo stato iniziale: {Config.RELAY_INITIAL_STATE}")
+    
     def get_status(self):
         """Restituisce lo stato attuale del relè"""
         return {
@@ -139,6 +156,7 @@ class RelayController:
             'active': self.is_active,
             'pin': Config.RELAY_PIN,
             'active_low': Config.RELAY_ACTIVE_LOW,
+            'initial_state': Config.RELAY_INITIAL_STATE,
             'duration': Config.RELAY_ACTIVE_TIME
         }
     
@@ -146,7 +164,8 @@ class RelayController:
         """Pulizia delle risorse GPIO"""
         try:
             if self.is_initialized:
-                self.force_off()
+                # Ripristina lo stato iniziale invece di forzare OFF
+                self.reset_to_initial_state()
                 # Non facciamo GPIO.cleanup() qui perché potrebbe interferire con RFID
                 print("🧹 Relè cleanup completato")
         except Exception as e:

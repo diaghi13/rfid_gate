@@ -32,11 +32,18 @@ class Config:
     # Configurazioni Relè
     RELAY_PIN = int(os.getenv('RELAY_PIN', 18))
     RELAY_ACTIVE_TIME = int(os.getenv('RELAY_ACTIVE_TIME', 2))
-    RELAY_ACTIVE_LOW = os.getenv('RELAY_ACTIVE_LOW', 'False').lower() == 'false'
+    RELAY_ACTIVE_LOW = os.getenv('RELAY_ACTIVE_LOW', 'False').lower() == 'true'
+    RELAY_INITIAL_STATE = os.getenv('RELAY_INITIAL_STATE', 'LOW').upper()
     
     # Configurazioni RFID
     RFID_RST_PIN = int(os.getenv('RFID_RST_PIN', 22))
     RFID_SDA_PIN = int(os.getenv('RFID_SDA_PIN', 8))
+    
+    # Configurazioni Logging
+    LOG_DIRECTORY = os.getenv('LOG_DIRECTORY', 'logs')
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', 30))
+    ENABLE_CONSOLE_LOG = os.getenv('ENABLE_CONSOLE_LOG', 'False').lower() == 'true'
     
     @classmethod
     def get_mqtt_topic(cls, action="badge"):
@@ -68,6 +75,9 @@ class Config:
         if cls.RELAY_PIN < 1 or cls.RELAY_PIN > 40:
             errors.append(f"RELAY_PIN non valido: {cls.RELAY_PIN}")
         
+        if cls.RELAY_INITIAL_STATE not in ['HIGH', 'LOW']:
+            errors.append(f"RELAY_INITIAL_STATE deve essere HIGH o LOW: {cls.RELAY_INITIAL_STATE}")
+        
         return errors
     
     @classmethod
@@ -85,6 +95,8 @@ class Config:
             print(f"   ⏱️  Timeout auth: {cls.AUTH_TIMEOUT}s")
         print(f"   ⚡ Relè GPIO: {cls.RELAY_PIN}")
         print(f"   ⏱️  Durata relè: {cls.RELAY_ACTIVE_TIME}s")
+        print(f"   🔧 Logica relè: {'Attivo LOW' if cls.RELAY_ACTIVE_LOW else 'Attivo HIGH'}")
+        print(f"   🔄 Stato iniziale: {cls.RELAY_INITIAL_STATE}")
         print(f"   📍 Topic badge: {cls.get_mqtt_topic()}")
         if cls.AUTH_ENABLED:
             print(f"   📍 Topic auth: {cls.get_auth_response_topic()}")

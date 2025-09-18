@@ -7,6 +7,7 @@ Applicazione principale con architettura modulare
 import sys
 import time
 import signal
+import os
 from datetime import datetime
 
 # Import dei moduli personalizzati
@@ -14,6 +15,7 @@ from config import Config
 from rfid_reader import RFIDReader
 from relay_controller import RelayController
 from mqtt_client import MQTTClient
+from logger import AccessLogger
 
 class AccessControlSystem:
     """Sistema principale di controllo accessi"""
@@ -22,6 +24,7 @@ class AccessControlSystem:
         self.rfid_reader = None
         self.relay_controller = None
         self.mqtt_client = None
+        self.logger = None
         self.running = False
         
         # Configura il gestore per Ctrl+C
@@ -49,36 +52,52 @@ class AccessControlSystem:
         Config.print_config()
         print("="*60)
         
+        # Inizializza Logger
+        print("\n📝 Inizializzazione Sistema di Logging...")
+        self.logger = AccessLogger(Config.LOG_DIRECTORY)
+        self.logger.log_system_event("system_start", "Sistema di controllo accessi avviato")
+        
         # Inizializza RFID Reader
         print("\n📖 Inizializzazione RFID Reader...")
         self.rfid_reader = RFIDReader()
         if not self.rfid_reader.initialize():
+            self.logger.log_system_event("rfid_init_error", "Errore inizializzazione RFID", "error")
             return False
         
         if not self.rfid_reader.test_connection():
+            self.logger.log_system_event("rfid_connection_error", "Test connessione RFID fallito", "error")
             return False
+        
+        self.logger.log_system_event("rfid_init", "RFID Reader inizializzato correttamente")
         
         # Inizializza Relay Controller
         print("\n⚡ Inizializzazione Relay Controller...")
         self.relay_controller = RelayController()
         if not self.relay_controller.initialize():
+            self.logger.log_system_event("relay_init_error", "Errore inizializzazione relè", "error")
             return False
         
         # Test del relè
         if not self.relay_controller.test_relay():
+            self.logger.log_system_event("relay_test_error", "Test relè fallito", "warning")
             return False
+        
+        self.logger.log_system_event("relay_init", "Relay Controller inizializzato correttamente")
         
         # Inizializza MQTT Client
         print("\n🌐 Inizializzazione MQTT Client...")
         self.mqtt_client = MQTTClient()
         if not self.mqtt_client.initialize():
+            self.logger.log_system_event("mqtt_init_error", "Errore inizializzazione MQTT", "error")
             return False
         
         if not self.mqtt_client.connect():
+            self.logger.log_system_event("mqtt_connection_error", "Connessione MQTT fallita", "error")
             return False
         
         # Invia messaggio di stato
         self.mqtt_client.publish_status("online")
+        self.logger.log_system_event("mqtt_init", f"MQTT Client connesso a {Config.MQTT_BROKER}")
         
         print("\n✅ Tutti i componenti inizializzati correttamente!")
         return True
@@ -97,8 +116,13 @@ class AccessControlSystem:
         print("📱 Avvicina una card NFC/RFID al lettore...")
         print("⚡ Il relè si attiverà automaticamente")
         print("📡 I dati verranno inviati via MQTT con TLS")
+        print("📝 Tutti gli accessi verranno registrati nei log")
         print("⏹️  Premi Ctrl+C per uscire")
         print("-"*70)
+        
+        # Mostra statistiche precedenti
+        if os.path.exists(os.path.join(Config.LOG_DIRECTORY, "access_log.csv")):
+            self.logger.print_stats(7)
         
         self._main_loop()
     
@@ -127,8 +151,14 @@ class AccessControlSystem:
                 # Mostra le informazioni
                 self._display_card_info(card_info, card_count)
                 
+                # Misura il tempo di autenticazione
+                auth_start_time = time.time()
+                
                 # Invia i dati via MQTT e aspetta l'autorizzazione
                 auth_result = self.mqtt_client.publish_card_data_and_wait_auth(card_info)
+                
+                # Calcola il tempo di autenticazione
+                auth_time_ms = int((time.time() - auth_start_time) * 1000)
                 
                 # Mostra il risultato dell'autenticazione
                 self._display_auth_result(auth_result)
@@ -143,6 +173,14 @@ class AccessControlSystem:
                     reason = auth_result.get('error') or auth_result.get('message', 'Motivo sconosciuto')
                     print(f"❌ Motivo: {reason}")
                 
+                # REGISTRA NEI LOG
+                log_entry = self.logger.log_access_attempt(
+                    card_info=card_info,
+                    auth_result=auth_result,
+                    relay_success=success_relay,
+                    auth_time_ms=auth_time_ms
+                )
+                
                 # Riepilogo operazione
                 self._display_operation_summary(True, success_relay, auth_result)
                 
@@ -152,6 +190,8 @@ class AccessControlSystem:
                 
         except Exception as e:
             print(f"\n❌ Errore nel loop principale: {e}")
+            if self.logger:
+                self.logger.log_system_event("main_loop_error", str(e), "error")
             print("🔧 Il sistema continuerà a funzionare...")
             time.sleep(2)
     
@@ -214,10 +254,13 @@ class AccessControlSystem:
             'rfid': self.rfid_reader.is_initialized if self.rfid_reader else False,
             'relay': self.relay_controller.get_status() if self.relay_controller else None,
             'mqtt': self.mqtt_client.get_status() if self.mqtt_client else None,
+            'logger': bool(self.logger),
             'running': self.running,
             'config': {
                 'tornello_id': Config.TORNELLO_ID,
-                'direzione': Config.DIREZIONE
+                'direzione': Config.DIREZIONE,
+                'auth_enabled': Config.AUTH_ENABLED,
+                'log_directory': Config.LOG_DIRECTORY
             }
         }
     
@@ -226,19 +269,37 @@ class AccessControlSystem:
         print("\n🛑 Spegnimento del sistema...")
         self.running = False
         
+        # Log di sistema
+        if self.logger:
+            self.logger.log_system_event("system_shutdown", "Spegnimento sistema in corso")
+            
+            # Mostra statistiche finali
+            print("\n📊 Statistiche finali della sessione:")
+            self.logger.print_stats(1)  # Statistiche di oggi
+        
         # Spegne MQTT
         if self.mqtt_client:
             self.mqtt_client.publish_status("offline")
             self.mqtt_client.disconnect()
+            if self.logger:
+                self.logger.log_system_event("mqtt_disconnect", "MQTT disconnesso")
         
         # Spegne il relè
         if self.relay_controller:
-            self.relay_controller.force_off()
+            self.relay_controller.reset_to_initial_state()
             self.relay_controller.cleanup()
+            if self.logger:
+                self.logger.log_system_event("relay_shutdown", "Relè ripristinato stato iniziale e GPIO puliti")
         
         # Pulisce RFID
         if self.rfid_reader:
             self.rfid_reader.cleanup()
+            if self.logger:
+                self.logger.log_system_event("rfid_shutdown", "RFID Reader spento")
+        
+        # Log finale
+        if self.logger:
+            self.logger.log_system_event("system_stop", "Sistema spento correttamente")
         
         print("👋 Sistema spento correttamente!")
         sys.exit(0)
