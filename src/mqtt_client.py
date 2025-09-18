@@ -7,18 +7,24 @@ Supporta connessioni TLS sicure
 import json
 import time
 import ssl
+import threading
 from datetime import datetime
 import paho.mqtt.client as mqtt
 from config import Config
 
 class MQTTClient:
-    """Classe per gestire la comunicazione MQTT"""
+    """Classe per gestire la comunicazione MQTT con autenticazione server"""
     
     def __init__(self):
         self.client = None
         self.is_connected = False
         self.connection_attempts = 0
         self.max_retries = 3
+        
+        # Sistema di autenticazione
+        self.auth_responses = {}  # Dizionario per memorizzare le risposte di auth
+        self.auth_lock = threading.Lock()
+        self.pending_auths = {}  # Richieste di auth in attesa
     
     def initialize(self):
         """Inizializza il client MQTT"""
@@ -45,6 +51,7 @@ class MQTTClient:
             self.client.on_connect = self._on_connect
             self.client.on_disconnect = self._on_disconnect
             self.client.on_publish = self._on_publish
+            self.client.on_message = self._on_message
             self.client.on_log = self._on_log
             
             print("✅ Client MQTT inizializzato")
@@ -94,6 +101,12 @@ class MQTTClient:
         if rc == 0:
             self.is_connected = True
             print("🟢 MQTT: Connesso al broker!")
+            
+            # Sottoscrive al topic di autenticazione se abilitata
+            if Config.AUTH_ENABLED:
+                auth_topic = Config.get_auth_response_topic()
+                client.subscribe(auth_topic, qos=1)
+                print(f"📬 Sottoscritto al topic: {auth_topic}")
         else:
             self.is_connected = False
             error_messages = {
@@ -105,6 +118,44 @@ class MQTTClient:
             }
             error_msg = error_messages.get(rc, f"Errore sconosciuto ({rc})")
             print(f"🔴 MQTT: Errore connessione - {error_msg}")
+    
+    def _on_message(self, client, userdata, msg):
+        """Callback per i messaggi ricevuti"""
+        try:
+            topic = msg.topic
+            payload = json.loads(msg.payload.decode('utf-8'))
+            
+            print(f"📬 Messaggio ricevuto su {topic}")
+            
+            # Gestisce risposte di autenticazione
+            if topic == Config.get_auth_response_topic():
+                self._handle_auth_response(payload)
+            
+        except Exception as e:
+            print(f"❌ Errore elaborazione messaggio: {e}")
+    
+    def _handle_auth_response(self, payload):
+        """Gestisce le risposte di autenticazione dal server"""
+        try:
+            card_uid = payload.get('card_uid')
+            authorized = payload.get('authorized', False)
+            message = payload.get('message', '')
+            
+            if card_uid:
+                with self.auth_lock:
+                    self.auth_responses[card_uid] = {
+                        'authorized': authorized,
+                        'message': message,
+                        'timestamp': time.time()
+                    }
+                
+                status = "✅ AUTORIZZATO" if authorized else "❌ NEGATO"
+                print(f"🔐 Risposta auth per {card_uid}: {status}")
+                if message:
+                    print(f"💬 Messaggio: {message}")
+            
+        except Exception as e:
+            print(f"❌ Errore gestione risposta auth: {e}")
     
     def _on_disconnect(self, client, userdata, rc):
         """Callback per la disconnessione MQTT"""
@@ -124,6 +175,56 @@ class MQTTClient:
         # print(f"🐛 MQTT Log: {buf}")
         pass
     
+    def publish_card_data_and_wait_auth(self, card_info):
+        """
+        Pubblica i dati della card e aspetta l'autorizzazione dal server
+        Args: card_info (dict) - Informazioni della card
+        Returns: dict - Risultato dell'autenticazione
+        """
+        if not self.is_connected:
+            print("❌ MQTT non connesso, impossibile inviare dati")
+            return {'authorized': False, 'error': 'MQTT disconnesso'}
+        
+        card_uid = card_info.get('uid_formatted')
+        
+        # Se l'autenticazione è disabilitata, autorizza sempre
+        if not Config.AUTH_ENABLED:
+            print("🔓 Autenticazione disabilitata - Accesso automatico")
+            self.publish_card_data(card_info)
+            return {'authorized': True, 'message': 'Autenticazione disabilitata'}
+        
+        try:
+            print(f"🔐 Richiesta autenticazione per card: {card_uid}")
+            
+            # Rimuove eventuali risposte precedenti
+            with self.auth_lock:
+                if card_uid in self.auth_responses:
+                    del self.auth_responses[card_uid]
+            
+            # Pubblica la richiesta di autenticazione
+            if not self.publish_card_data(card_info):
+                return {'authorized': False, 'error': 'Errore invio richiesta'}
+            
+            # Aspetta la risposta del server
+            print(f"⏳ Attendo risposta server (timeout: {Config.AUTH_TIMEOUT}s)...")
+            
+            start_time = time.time()
+            while (time.time() - start_time) < Config.AUTH_TIMEOUT:
+                with self.auth_lock:
+                    if card_uid in self.auth_responses:
+                        response = self.auth_responses[card_uid]
+                        del self.auth_responses[card_uid]  # Pulisce la risposta
+                        return response
+                
+                time.sleep(0.1)  # Controlla ogni 100ms
+            
+            # Timeout scaduto
+            print("⏰ Timeout autenticazione scaduto")
+            return {'authorized': False, 'error': 'Timeout autenticazione'}
+            
+        except Exception as e:
+            print(f"❌ Errore processo autenticazione: {e}")
+            return {'authorized': False, 'error': str(e)}
     def publish_card_data(self, card_info):
         """
         Pubblica i dati della card sul topic MQTT
@@ -145,7 +246,8 @@ class MQTTClient:
                 "timestamp": datetime.now().isoformat(),
                 "raw_id": str(card_info.get('raw_id')),
                 "card_data": card_info.get('data'),
-                "hex_id": card_info.get('uid_hex')
+                "hex_id": card_info.get('uid_hex'),
+                "auth_required": Config.AUTH_ENABLED
             }
             
             # Converte in JSON

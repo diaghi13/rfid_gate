@@ -127,14 +127,24 @@ class AccessControlSystem:
                 # Mostra le informazioni
                 self._display_card_info(card_info, card_count)
                 
-                # Invia i dati via MQTT
-                success_mqtt = self.mqtt_client.publish_card_data(card_info)
+                # Invia i dati via MQTT e aspetta l'autorizzazione
+                auth_result = self.mqtt_client.publish_card_data_and_wait_auth(card_info)
                 
-                # Attiva il relè
-                success_relay = self.relay_controller.activate()
+                # Mostra il risultato dell'autenticazione
+                self._display_auth_result(auth_result)
+                
+                # Attiva il relè solo se autorizzato
+                success_relay = False
+                if auth_result.get('authorized', False):
+                    print("🔓 Accesso autorizzato - Attivazione relè...")
+                    success_relay = self.relay_controller.activate()
+                else:
+                    print("🔒 Accesso negato - Relè non attivato")
+                    reason = auth_result.get('error') or auth_result.get('message', 'Motivo sconosciuto')
+                    print(f"❌ Motivo: {reason}")
                 
                 # Riepilogo operazione
-                self._display_operation_summary(success_mqtt, success_relay)
+                self._display_operation_summary(True, success_relay, auth_result)
                 
                 print("\n✅ Operazione completata! Rimuovi la card...")
                 time.sleep(1)
@@ -160,20 +170,43 @@ class AccessControlSystem:
         print(f"➡️  Direzione: {Config.DIREZIONE}")
         print("="*60)
     
-    def _display_operation_summary(self, mqtt_success, relay_success):
+    def _display_auth_result(self, auth_result):
+        """Mostra il risultato dell'autenticazione"""
+        authorized = auth_result.get('authorized', False)
+        message = auth_result.get('message', '')
+        error = auth_result.get('error', '')
+        
+        if authorized:
+            print("🟢 AUTENTICAZIONE RIUSCITA")
+            if message:
+                print(f"💬 Messaggio server: {message}")
+        else:
+            print("🔴 AUTENTICAZIONE FALLITA")
+            if error:
+                print(f"❌ Errore: {error}")
+            elif message:
+                print(f"💬 Messaggio server: {message}")
+    
+    def _display_operation_summary(self, mqtt_success, relay_success, auth_result):
         """Mostra il riepilogo delle operazioni"""
         print(f"\n📋 Riepilogo operazioni:")
         
         mqtt_status = "✅ Inviato" if mqtt_success else "❌ Fallito"
-        relay_status = "✅ Attivato" if relay_success else "❌ Fallito"
+        auth_status = "✅ Autorizzato" if auth_result.get('authorized', False) else "❌ Negato"
+        relay_status = "✅ Attivato" if relay_success else "❌ Non attivato"
         
         print(f"   📡 MQTT: {mqtt_status}")
+        if Config.AUTH_ENABLED:
+            print(f"   🔐 Auth: {auth_status}")
         print(f"   ⚡ Relè: {relay_status}")
         
-        if mqtt_success and relay_success:
-            print("   🎯 Tutte le operazioni completate con successo!")
+        if mqtt_success and (not Config.AUTH_ENABLED or auth_result.get('authorized', False)):
+            if relay_success:
+                print("   🎯 Accesso completato con successo!")
+            else:
+                print("   ⚠️ Accesso autorizzato ma relè non attivato")
         else:
-            print("   ⚠️ Alcune operazioni sono fallite")
+            print("   🔒 Accesso negato o errore sistema")
     
     def get_system_status(self):
         """Restituisce lo stato di tutti i componenti"""
