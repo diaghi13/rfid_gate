@@ -1,11 +1,54 @@
 #!/usr/bin/env python3
 """
-Gestione configurazioni sistema RFID - Versione semplificata
+Gestione configurazioni sistema RFID - Versione senza dotenv
 """
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+def load_env_file():
+    """Carica file .env manualmente senza dipendenza dotenv"""
+    env_path = '.env'
+    
+    # Se lanciato da src/, cerca .env nella directory padre
+    if not os.path.exists(env_path):
+        env_path = '../.env'
+    
+    if not os.path.exists(env_path):
+        print("⚠️ File .env non trovato")
+        return
+    
+    try:
+        with open(env_path, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                
+                # Ignora linee vuote e commenti
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Cerca formato KEY=VALUE
+                if '=' not in line:
+                    continue
+                
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Rimuovi virgolette se presenti
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                elif value.startswith("'") and value.endswith("'"):
+                    value = value[1:-1]
+                
+                # Imposta variabile ambiente
+                os.environ[key] = value
+        
+        print("✅ File .env caricato")
+        
+    except Exception as e:
+        print(f"⚠️ Errore caricamento .env: {e}")
+
+# Carica configurazioni
+load_env_file()
 
 class Config:
     """Configurazioni sistema"""
@@ -76,8 +119,8 @@ class Config:
     LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', 30))
     ENABLE_CONSOLE_LOG = os.getenv('ENABLE_CONSOLE_LOG', 'False').lower() == 'true'
     
-    # RFID Debounce (nuovo per evitare letture multiple)
-    RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))  # secondi
+    # RFID Debounce
+    RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
     
     @classmethod
     def get_mqtt_topic(cls, action="badge"):
@@ -110,3 +153,18 @@ class Config:
             errors.append("Almeno un relè deve essere abilitato")
             
         return errors
+
+# Test configurazione al caricamento
+if __name__ == "__main__":
+    print("🧪 Test configurazione")
+    print(f"MQTT_BROKER: {Config.MQTT_BROKER}")
+    print(f"TORNELLO_ID: {Config.TORNELLO_ID}")
+    print(f"RELAY_IN_PIN: {Config.RELAY_IN_PIN}")
+    
+    errors = Config.validate_config()
+    if errors:
+        print("❌ Errori:")
+        for error in errors:
+            print(f"  - {error}")
+    else:
+        print("✅ Configurazione OK")
