@@ -29,23 +29,35 @@ class RelayController:
         """Cleanup semplice senza errori"""
         try:
             if self.is_initialized and self.gpio_pin:
+                GPIO.setwarnings(False)
                 GPIO.setmode(GPIO.BCM)
                 GPIO.setup(self.gpio_pin, GPIO.OUT)
-                GPIO.output(self.gpio_pin, GPIO.LOW)  # Sempre LOW per sicurezza
+                
+                # Per active LOW: HIGH = spento, LOW = attivo
+                if self.active_low:
+                    GPIO.output(self.gpio_pin, GPIO.HIGH)  # Spento per active low
+                else:
+                    GPIO.output(self.gpio_pin, GPIO.LOW)   # Spento per active high
+                    
         except:
             pass  # Ignora tutti gli errori durante atexit
     
     def initialize(self):
         """Inizializza GPIO"""
         try:
+            GPIO.setwarnings(False)
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.gpio_pin, GPIO.OUT)
             
-            # Sempre spento inizialmente
-            GPIO.output(self.gpio_pin, GPIO.LOW)
+            # Stato iniziale sicuro (sempre spento)
+            if self.active_low:
+                GPIO.output(self.gpio_pin, GPIO.HIGH)  # HIGH = spento per active low
+                print(f"Relè {self.relay_id}: GPIO {self.gpio_pin} inizializzato (HIGH=spento)")
+            else:
+                GPIO.output(self.gpio_pin, GPIO.LOW)   # LOW = spento per active high
+                print(f"Relè {self.relay_id}: GPIO {self.gpio_pin} inizializzato (LOW=spento)")
             
             self.is_initialized = True
-            print(f"Relè {self.relay_id}: GPIO {self.gpio_pin} inizializzato")
             return True
             
         except Exception as e:
@@ -133,17 +145,29 @@ class RelayController:
                 self._current_thread = None
             
             if self.is_initialized:
-                safe_level = GPIO.HIGH if self.active_low else GPIO.LOW
+                # Livello per spegnere basato su active_low
+                if self.active_low:
+                    safe_level = GPIO.HIGH  # HIGH = spento per active low
+                else:
+                    safe_level = GPIO.LOW   # LOW = spento per active high
+                
                 GPIO.output(self.gpio_pin, safe_level)
-                print(f"Relè {self.relay_id}: Spento forzatamente")
+                print(f"Relè {self.relay_id}: Spento ({'HIGH' if safe_level else 'LOW'})")
             
         except Exception as e:
-            # Se GPIO normale fallisce, prova emergency
+            # Fallback con emergency
             try:
+                GPIO.setwarnings(False)
                 GPIO.setmode(GPIO.BCM)
                 GPIO.setup(self.gpio_pin, GPIO.OUT)
-                GPIO.output(self.gpio_pin, GPIO.LOW)
-                print(f"Relè {self.relay_id}: Emergency stop")
+                
+                if self.active_low:
+                    GPIO.output(self.gpio_pin, GPIO.HIGH)  # Spento per active low
+                    print(f"Relè {self.relay_id}: Emergency stop (HIGH)")
+                else:
+                    GPIO.output(self.gpio_pin, GPIO.LOW)   # Spento per active high  
+                    print(f"Relè {self.relay_id}: Emergency stop (LOW)")
+                    
             except:
                 print(f"Warning: Impossibile spegnere relè {self.relay_id}")
     
