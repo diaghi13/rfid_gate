@@ -7,6 +7,7 @@ import sys
 import argparse
 import json
 import os
+from dotenv import load_dotenv
 from datetime import datetime
 from config import Config
 from offline_manager import OfflineManager
