@@ -97,39 +97,62 @@ class BidirectionalAccessSystem:
         
         # Inizializza MQTT Client
         print("\n🌐 Inizializzazione MQTT Client...")
+        mqtt_connected = False
         try:
             self.mqtt_client = MQTTClient()
-            if not self.mqtt_client.initialize():
-                self.logger.log_system_event("mqtt_init_error", "Errore inizializzazione MQTT", "error")
-                return False
-            
-            if not self.mqtt_client.connect():
-                self.logger.log_system_event("mqtt_connection_error", "Connessione MQTT fallita", "error")
-                return False
-            
-            # Invia messaggio di stato
-            self.mqtt_client.publish_status("online")
-            self.logger.log_system_event("mqtt_init", f"MQTT Client connesso a {Config.MQTT_BROKER}")
+            if self.mqtt_client.initialize():
+                if self.mqtt_client.connect():
+                    # Invia messaggio di stato
+                    self.mqtt_client.publish_status("online")
+                    self.logger.log_system_event("mqtt_init", f"MQTT Client connesso a {Config.MQTT_BROKER}")
+                    print("✅ MQTT Client connesso")
+                    mqtt_connected = True
+                else:
+                    print("⚠️ MQTT Client inizializzato ma non connesso")
+                    self.logger.log_system_event("mqtt_connection_warning", "MQTT inizializzato ma connessione fallita", "warning")
+            else:
+                print("⚠️ MQTT Client non inizializzato")
+                self.logger.log_system_event("mqtt_init_warning", "MQTT Client non inizializzato", "warning")
         except Exception as e:
             print(f"⚠️ Errore MQTT Client: {e}")
             if self.logger:
                 self.logger.log_system_event("mqtt_init_error", str(e), "warning")
             # Non bloccare l'avvio se MQTT fallisce in modalità offline
         
-        # Inizializza Offline Manager
+        # Inizializza Offline Manager (SEMPRE, anche se MQTT fallisce)
         print("\n🌐 Inizializzazione Offline Manager...")
         try:
             self.offline_manager = OfflineManager(self.mqtt_client, self.logger)
             if self.offline_manager.initialize():
                 self.logger.log_system_event("offline_manager_init", "Offline Manager inizializzato")
+                print("✅ Offline Manager attivato")
+                
+                # Verifica stato iniziale
+                offline_status = self.offline_manager.get_status()
+                if offline_status['online']:
+                    print("🟢 Sistema: ONLINE")
+                else:
+                    print("🔴 Sistema: OFFLINE - Modalità fallback attiva")
             else:
-                print("⚠️ Offline Manager non inizializzato")
+                print("❌ Offline Manager non inizializzato - Sistema potrebbe non funzionare offline")
+                # Non bloccare l'avvio, ma avvisa
         except Exception as e:
-            print(f"⚠️ Errore Offline Manager: {e}")
+            print(f"❌ Errore Offline Manager: {e}")
             if self.logger:
-                self.logger.log_system_event("offline_manager_error", str(e), "warning")
+                self.logger.log_system_event("offline_manager_error", str(e), "error")
+            print("⚠️ Sistema continuerà senza fallback offline")
         
-        print("\n✅ Tutti i componenti inizializzati correttamente!")
+        print("\n✅ Inizializzazione completata!")
+        
+        # Report finale configurazione
+        if self.offline_manager:
+            offline_status = self.offline_manager.get_status()
+            print(f"📊 Modalità offline: {'✅ Abilitata' if offline_status['enabled'] else '❌ Disabilitata'}")
+            if offline_status['enabled']:
+                print(f"🚪 Accesso offline: {'✅ Consentito' if offline_status['allow_offline_access'] else '❌ Negato'}")
+        else:
+            print("📊 Modalità offline: ❌ Non disponibile")
+        
         return True
     
     def run(self):
@@ -152,6 +175,24 @@ class BidirectionalAccessSystem:
         print("\n" + "="*80)
         print("🎯 SISTEMA DI CONTROLLO ACCESSI BIDIREZIONALE ATTIVO")
         print("="*80)
+        
+        # Mostra configurazione attiva
+        try:
+            active_readers = self.rfid_manager.get_active_readers()
+            active_relays = self.relay_manager.get_active_relays()
+            
+            print(f"📱 Lettori RFID attivi: {', '.join([r.upper() for r in active_readers])}")
+            print(f"⚡ Relè attivi: {', '.join([r.upper() for r in active_relays])}")
+            print("📡 Dati inviati via MQTT con TLS e autenticazione")
+            print("📝 Tutti gli accessi vengono registrati nei log")
+            print("⏹️  Premi Ctrl+C per uscire")
+            print("-"*80)
+            
+            # Mostra statistiche precedenti se disponibili
+            if os.path.exists(os.path.join(Config.LOG_DIRECTORY, "access_log.csv")):
+                self.logger.print_stats(7)
+        except Exception as e:
+            print(f"⚠️ Errore visualizzazione status: {e}")
         
         # Mostra configurazione attiva
         try:
@@ -211,18 +252,42 @@ class BidirectionalAccessSystem:
                     auth_start_time = time.time()
                     
                     # Usa il sistema offline/online per l'autenticazione
-                    if self.offline_manager:
-                        auth_result = self.offline_manager.handle_card_access(card_info)
-                    else:
-                        # Fallback se offline manager non disponibile
-                        if self.mqtt_client and self.mqtt_client.is_connected:
+                    auth_result = None
+                    
+                    try:
+                        if self.offline_manager:
+                            # Usa l'offline manager (gestisce automaticamente online/offline)
+                            auth_result = self.offline_manager.handle_card_access(card_info)
+                        elif self.mqtt_client and hasattr(self.mqtt_client, 'is_connected') and self.mqtt_client.is_connected:
+                            # Fallback diretto a MQTT se offline manager non disponibile
                             auth_result = self.mqtt_client.publish_card_data_and_wait_auth(card_info)
                         else:
+                            # Sistema completamente offline
+                            print("🔴 Sistema offline - Nessuna connessione disponibile")
                             auth_result = {
-                                'authorized': Config.OFFLINE_ALLOW_ACCESS,
-                                'message': 'Accesso offline senza manager',
-                                'offline_mode': True
+                                'authorized': Config.OFFLINE_ALLOW_ACCESS if Config.OFFLINE_MODE_ENABLED else False,
+                                'message': 'Sistema offline - Accesso locale',
+                                'offline_mode': True,
+                                'error': None if (Config.OFFLINE_ALLOW_ACCESS and Config.OFFLINE_MODE_ENABLED) else 'Sistema offline e accessi offline disabilitati'
                             }
+                    except Exception as e:
+                        print(f"⚠️ Errore durante autenticazione: {e}")
+                        # Fallback di emergenza
+                        auth_result = {
+                            'authorized': Config.OFFLINE_ALLOW_ACCESS if Config.OFFLINE_MODE_ENABLED else False,
+                            'message': f'Fallback offline - Errore: {str(e)[:50]}...',
+                            'offline_mode': True,
+                            'error': str(e) if not (Config.OFFLINE_ALLOW_ACCESS and Config.OFFLINE_MODE_ENABLED) else None
+                        }
+                    
+                    # Fallback di sicurezza finale
+                    if auth_result is None:
+                        print("❌ Errore sistema autenticazione - Fallback di sicurezza")
+                        auth_result = {
+                            'authorized': False,
+                            'error': 'Errore critico sistema autenticazione',
+                            'offline_mode': False
+                        }
                     
                     # Calcola il tempo di autenticazione
                     auth_time_ms = int((time.time() - auth_start_time) * 1000)
@@ -238,19 +303,43 @@ class BidirectionalAccessSystem:
                         mode = "OFFLINE" if auth_result.get('offline_mode', False) else "ONLINE"
                         print(f"🔓 Accesso autorizzato ({mode}) per direzione {direction.upper()} - Attivazione relè...")
                         
-                        # Controlla se il relè per questa direzione è disponibile
-                        if direction in self.relay_manager.get_active_relays():
-                            success_relay = self.relay_manager.activate_relay(direction)
-                        else:
-                            print(f"⚠️ Relè {direction.upper()} non configurato - usando primo relè disponibile")
+                        # Debug: mostra relè disponibili
+                        if self.relay_manager:
                             available_relays = self.relay_manager.get_active_relays()
-                            if available_relays:
-                                success_relay = self.relay_manager.activate_relay(available_relays[0])
+                            print(f"🔧 Debug: Relè disponibili: {available_relays}")
+                            
+                            # Controlla se il relè per questa direzione è disponibile
+                            if direction in available_relays:
+                                print(f"⚡ Attivazione relè {direction.upper()}...")
+                                success_relay = self.relay_manager.activate_relay(direction)
+                                if success_relay:
+                                    print(f"✅ Relè {direction.upper()} attivato con successo")
+                                else:
+                                    print(f"❌ Errore attivazione relè {direction.upper()}")
+                            else:
+                                print(f"⚠️ Relè {direction.upper()} non configurato - usando primo relè disponibile")
+                                if available_relays:
+                                    first_relay = available_relays[0]
+                                    print(f"⚡ Attivazione relè alternativo {first_relay.upper()}...")
+                                    success_relay = self.relay_manager.activate_relay(first_relay)
+                                    if success_relay:
+                                        print(f"✅ Relè alternativo {first_relay.upper()} attivato")
+                                    else:
+                                        print(f"❌ Errore attivazione relè alternativo {first_relay.upper()}")
+                                else:
+                                    print("❌ Nessun relè disponibile!")
+                        else:
+                            print("❌ Relay Manager non disponibile!")
                     else:
                         mode = "OFFLINE" if auth_result.get('offline_mode', False) else "ONLINE"
                         print(f"🔒 Accesso negato ({mode}) per direzione {direction.upper()} - Relè non attivato")
                         reason = auth_result.get('error') or auth_result.get('message', 'Motivo sconosciuto')
                         print(f"❌ Motivo: {reason}")
+                        
+                        # Debug: anche per accessi negati mostra relè disponibili
+                        if self.relay_manager:
+                            available_relays = self.relay_manager.get_active_relays()
+                            print(f"🔧 Debug: Relè disponibili (non attivati): {available_relays}")
                     
                     # REGISTRA NEI LOG
                     try:

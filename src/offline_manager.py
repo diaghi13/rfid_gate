@@ -102,12 +102,24 @@ class OfflineManager:
             self.sync_thread.join(timeout=2)
     
     def check_connection(self):
-        """Controlla se c'è connessione internet"""
+        """Controlla se c'è connessione internet e MQTT"""
         try:
-            # Prova a connettersi al broker MQTT
+            # Prima verifica connessione internet generica
+            import socket
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            
+            # Poi testa il broker MQTT specifico
             socket.create_connection((Config.MQTT_BROKER, Config.MQTT_PORT), timeout=5)
             
-            # Se arriviamo qui, la connessione c'è
+            # Verifica anche stato MQTT client se disponibile
+            mqtt_connected = False
+            if self.mqtt_client:
+                try:
+                    mqtt_connected = self.mqtt_client.is_connected
+                except:
+                    mqtt_connected = False
+            
+            # Se arriviamo qui, la connessione di base c'è
             was_offline = not self.is_online
             self.is_online = True
             self.last_connection_check = time.time()
@@ -118,13 +130,21 @@ class OfflineManager:
                 if self.logger:
                     self.logger.log_system_event("connection_restored", "Connessione internet ripristinata")
                 
+                # Riconnetti MQTT se necessario
+                if self.mqtt_client and not mqtt_connected:
+                    try:
+                        print("🔄 Tentativo riconnessione MQTT...")
+                        self.mqtt_client.connect()
+                    except Exception as e:
+                        print(f"⚠️ Riconnessione MQTT fallita: {e}")
+                
                 # Avvia sync se abilitata
                 if Config.OFFLINE_SYNC_ENABLED and not self.offline_queue.empty():
                     print(f"📤 Avvio sincronizzazione ({self.offline_queue.qsize()} elementi in coda)")
             
             return True
             
-        except (socket.timeout, socket.error, OSError) as e:
+        except (socket.timeout, socket.error, OSError, ConnectionRefusedError) as e:
             was_online = self.is_online
             self.is_online = False
             self.last_connection_check = time.time()
@@ -134,12 +154,19 @@ class OfflineManager:
                 print("🔴 Connessione internet persa - Attivazione modalità offline")
                 if self.logger:
                     self.logger.log_system_event("connection_lost", f"Connessione internet persa: {e}", "warning")
+                
+                # Mostra info modalità offline
+                if Config.OFFLINE_ALLOW_ACCESS:
+                    print("✅ Accessi offline consentiti - Sistema continua a funzionare")
+                else:
+                    print("❌ Accessi offline disabilitati - Sistema bloccato")
             
             return False
         
         except Exception as e:
             print(f"⚠️ Errore controllo connessione: {e}")
-            return False
+            # In caso di errore, mantieni lo stato attuale
+            return self.is_online
     
     def _connection_monitor_thread(self):
         """Thread per il monitoraggio continuo della connessione"""
