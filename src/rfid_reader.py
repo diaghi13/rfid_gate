@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Modulo per la gestione del lettore RFID RC522
+Lettore RFID con debounce per evitare letture multiple
 """
-
 import RPi.GPIO as GPIO
 from mfrc522 import SimpleMFRC522
+import time
 from config import Config
 
 class RFIDReader:
-    """Classe per gestire il lettore RFID RC522"""
+    """Lettore RFID con debounce"""
     
     def __init__(self, reader_id="default", rst_pin=None, sda_pin=None):
         self.reader_id = reader_id
@@ -16,76 +16,58 @@ class RFIDReader:
         self.sda_pin = sda_pin or Config.RFID_IN_SDA_PIN
         self.reader = None
         self.is_initialized = False
+        
+        # Debounce per evitare letture multiple
+        self.last_card_id = None
+        self.last_read_time = 0
+        self.debounce_time = Config.RFID_DEBOUNCE_TIME
     
     def initialize(self):
-        """Inizializza il lettore RFID"""
+        """Inizializza lettore"""
         try:
             GPIO.setmode(GPIO.BCM)
             self.reader = SimpleMFRC522()
             self.is_initialized = True
-            print("✅ Lettore RFID inizializzato correttamente")
             return True
         except Exception as e:
-            print(f"❌ Errore inizializzazione RFID: {e}")
-            return False
-    
-    def test_connection(self):
-        """Testa la connessione al modulo RC522"""
-        if not self.is_initialized:
-            return False
-        
-        try:
-            # Tentativo di creare un'istanza per testare la connessione
-            test_reader = SimpleMFRC522()
-            del test_reader
-            print("✅ Connessione RC522 verificata")
-            return True
-        except Exception as e:
-            print(f"❌ Test connessione RC522 fallito: {e}")
-            print("🔧 Verifica:")
-            print("   - Collegamenti SPI corretti")
-            print("   - SPI abilitato (sudo raspi-config)")
-            print("   - Alimentazione 3.3V al modulo")
+            print(f"Errore init RFID {self.reader_id}: {e}")
             return False
     
     def read_card(self):
-        """
-        Legge una card RFID e restituisce i dati
-        Returns: tuple (card_id, card_data) o (None, None) se errore
-        """
+        """Legge card con debounce"""
         if not self.is_initialized:
-            print("❌ Lettore RFID non inizializzato")
             return None, None
         
         try:
-            print("⏳ In attesa di una card...")
             card_id, card_data = self.reader.read()
+            current_time = time.time()
+            
+            # Debounce: ignora se stessa card letta di recente
+            if (card_id == self.last_card_id and 
+                (current_time - self.last_read_time) < self.debounce_time):
+                return None, None  # Ignora lettura duplicata
+            
+            # Aggiorna debounce
+            self.last_card_id = card_id
+            self.last_read_time = current_time
+            
             return card_id, card_data
+            
         except Exception as e:
-            print(f"❌ Errore lettura card: {e}")
+            print(f"Errore lettura RFID {self.reader_id}: {e}")
             return None, None
     
     def format_card_uid(self, card_id):
-        """
-        Formatta l'ID della card in formato MIFARE standard
-        Args: card_id (int) - ID numerico della card
-        Returns: str - UID formattato (es: "C67BD905")
-        """
+        """Formatta UID card"""
         if card_id is None:
             return None
-        
         try:
-            # Converte in esadecimale e formatta (8 caratteri, maiuscolo)
-            formatted_uid = hex(card_id)[2:].upper().zfill(8)
-            return formatted_uid
-        except Exception as e:
-            print(f"❌ Errore formattazione UID: {e}")
+            return hex(card_id)[2:].upper().zfill(8)
+        except:
             return str(card_id)
     
     def get_card_info(self, card_id, card_data):
-        """
-        Restituisce un dizionario con tutte le informazioni della card
-        """
+        """Info complete card"""
         return {
             'raw_id': card_id,
             'uid_formatted': self.format_card_uid(card_id),
@@ -94,15 +76,22 @@ class RFIDReader:
             'data_length': len(card_data) if card_data else 0
         }
     
+    def test_connection(self):
+        """Test connessione modulo"""
+        if not self.is_initialized:
+            return False
+        try:
+            test_reader = SimpleMFRC522()
+            del test_reader
+            return True
+        except Exception as e:
+            print(f"Test RFID {self.reader_id} fallito: {e}")
+            return False
+    
     def cleanup(self):
-        """Pulizia delle risorse GPIO"""
+        """Cleanup"""
         try:
             if self.is_initialized:
                 GPIO.cleanup()
-                print("🧹 RFID cleanup completato")
-        except Exception as e:
-            print(f"⚠️ Warning cleanup RFID: {e}")
-    
-    def __del__(self):
-        """Destructor - pulisce automaticamente le risorse"""
-        self.cleanup()
+        except:
+            pass
