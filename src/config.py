@@ -27,7 +27,7 @@ class Config:
     # Configurazioni Relè
     RELAY_PIN = int(os.getenv('RELAY_PIN', 18))
     RELAY_ACTIVE_TIME = int(os.getenv('RELAY_ACTIVE_TIME', 2))
-    RELAY_ACTIVE_LOW = os.getenv('RELAY_ACTIVE_LOW', 'False').lower() == 'true'
+    RELAY_ACTIVE_LOW = os.getenv('RELAY_ACTIVE_LOW', 'False').lower() == 'false'
     
     # Configurazioni RFID
     RFID_RST_PIN = int(os.getenv('RFID_RST_PIN', 22))
