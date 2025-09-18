@@ -66,16 +66,14 @@ class RFIDReader:
         """
         Formatta l'ID della card in formato MIFARE standard
         Args: card_id (int) - ID numerico della card
-        Returns: str - UID formattato (es: "A1:B2:C3:D4")
+        Returns: str - UID formattato (es: "C67BD905")
         """
         if card_id is None:
             return None
         
         try:
-            # Converte in esadecimale e formatta
-            hex_id = hex(card_id)[2:].upper().zfill(8)
-            # Divide in byte separati da due punti
-            formatted_uid = ":".join([hex_id[i:i+2] for i in range(0, len(hex_id), 2)])
+            # Converte in esadecimale e formatta (8 caratteri, maiuscolo)
+            formatted_uid = hex(card_id)[2:].upper().zfill(8)
             return formatted_uid
         except Exception as e:
             print(f"❌ Errore formattazione UID: {e}")
