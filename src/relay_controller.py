@@ -39,7 +39,13 @@ class RelayController:
         """Cleanup di emergenza chiamato automaticamente"""
         try:
             if self.is_initialized:
-                self.force_off_immediate()
+                # Cleanup semplice senza messaggi per evitare errori atexit
+                try:
+                    GPIO.setmode(GPIO.BCM)
+                    GPIO.setup(self.gpio_pin, GPIO.OUT)
+                    GPIO.output(self.gpio_pin, GPIO.LOW)  # Sempre LOW per sicurezza
+                except:
+                    pass  # Ignora errori durante atexit
         except:
             pass
     
@@ -168,25 +174,38 @@ class RelayController:
             
             # Spegni relè
             if self.is_initialized:
-                safe_level = GPIO.HIGH if self.active_low else GPIO.LOW
-                GPIO.output(self.gpio_pin, safe_level)
-                
-                # Verifica spegnimento
-                time.sleep(0.01)
-                actual_state = GPIO.input(self.gpio_pin)
-                
-                if actual_state == safe_level:
-                    print(f"✅ Relè {self.relay_id}: Spento con successo")
-                else:
-                    print(f"⚠️ Relè {self.relay_id}: Potrebbe essere ancora attivo!")
+                try:
+                    # Assicurati che GPIO sia configurato
+                    GPIO.setmode(GPIO.BCM)
+                    GPIO.setup(self.gpio_pin, GPIO.OUT)
                     
-                    # Secondo tentativo
+                    safe_level = GPIO.HIGH if self.active_low else GPIO.LOW
                     GPIO.output(self.gpio_pin, safe_level)
+                    
+                    # Verifica spegnimento
                     time.sleep(0.01)
-                    print(f"🔄 Relè {self.relay_id}: Secondo tentativo spegnimento")
+                    actual_state = GPIO.input(self.gpio_pin)
+                    
+                    if actual_state == safe_level:
+                        print(f"✅ Relè {self.relay_id}: Spento con successo")
+                    else:
+                        print(f"⚠️ Relè {self.relay_id}: Secondo tentativo...")
+                        GPIO.output(self.gpio_pin, safe_level)
+                        time.sleep(0.01)
+                        print(f"🔄 Relè {self.relay_id}: Spegnimento forzato")
+                        
+                except Exception as gpio_error:
+                    # Se GPIO fallisce, prova spegnimento di base
+                    try:
+                        GPIO.setmode(GPIO.BCM)
+                        GPIO.setup(self.gpio_pin, GPIO.OUT)
+                        GPIO.output(self.gpio_pin, GPIO.LOW)  # Forza LOW come sicurezza
+                        print(f"🔴 Relè {self.relay_id}: Spegnimento di emergenza")
+                    except:
+                        print(f"⚠️ Relè {self.relay_id}: Impossibile controllare GPIO")
             
         except Exception as e:
-            print(f"Errore spegnimento relè {self.relay_id}: {e}")
+            print(f"Warning spegnimento relè {self.relay_id}: {e}")
     
     def force_off(self):
         """Alias per compatibilità"""
@@ -229,18 +248,22 @@ class RelayController:
             # Spegni relè garantito
             self.force_off_immediate()
             
-            # NON fare GPIO.cleanup() qui per evitare conflitti con altri relè
-            # Il cleanup GPIO sarà fatto dal RelayManager
-            
             print(f"✅ Cleanup relè {self.relay_id} completato")
             
         except Exception as e:
             print(f"⚠️ Warning cleanup relè {self.relay_id}: {e}")
     
     def __del__(self):
-        """Destructor con cleanup garantito"""
+        """Destructor con cleanup silenzioso"""
         try:
-            self.force_off_immediate()
+            # Cleanup silenzioso per evitare errori durante garbage collection
+            if self.is_initialized:
+                try:
+                    GPIO.setmode(GPIO.BCM)
+                    GPIO.setup(self.gpio_pin, GPIO.OUT)
+                    GPIO.output(self.gpio_pin, GPIO.LOW)
+                except:
+                    pass
         except:
             pass
 
