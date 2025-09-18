@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """
-Controller relè con gestione GPIO sicura
+Controller relè - Versione semplice che funziona
 """
 import RPi.GPIO as GPIO
 import time
 import threading
 import atexit
-import signal
-import sys
 from config import Config
-from gpio_utils import safe_gpio_setup, safe_gpio_output, safe_gpio_input, emergency_gpio_stop
 
 class RelayController:
-    """Gestione singolo relè con GPIO sicuro"""
+    """Gestione singolo relè - versione semplice"""
     
     def __init__(self, relay_id="default", gpio_pin=None, active_time=None, active_low=None, initial_state=None):
         self.relay_id = relay_id
@@ -25,58 +22,46 @@ class RelayController:
         self._lock = threading.Lock()
         self._current_thread = None
         
-        # Registra cleanup automatico
-        atexit.register(self._emergency_cleanup)
+        # Registra cleanup semplice
+        atexit.register(self._simple_cleanup)
     
-    def _emergency_cleanup(self):
-        """Cleanup di emergenza silenzioso"""
+    def _simple_cleanup(self):
+        """Cleanup semplice senza errori"""
         try:
-            if self.is_initialized:
-                emergency_gpio_stop(self.gpio_pin)
+            if self.is_initialized and self.gpio_pin:
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setup(self.gpio_pin, GPIO.OUT)
+                GPIO.output(self.gpio_pin, GPIO.LOW)  # Sempre LOW per sicurezza
         except:
-            pass  # Silenzioso durante atexit
+            pass  # Ignora tutti gli errori durante atexit
     
     def initialize(self):
         """Inizializza GPIO"""
         try:
-            # Setup sicuro del pin
-            if not safe_gpio_setup(self.gpio_pin, GPIO.OUT, GPIO.LOW):
-                return False
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self.gpio_pin, GPIO.OUT)
+            
+            # Sempre spento inizialmente
+            GPIO.output(self.gpio_pin, GPIO.LOW)
             
             self.is_initialized = True
             print(f"Relè {self.relay_id}: GPIO {self.gpio_pin} inizializzato")
-            
-            # Test rapido
-            self._test_quick()
-            
             return True
             
         except Exception as e:
             print(f"Errore init relè {self.relay_id}: {e}")
             return False
     
-    def _test_quick(self):
-        """Test rapido 0.1s"""
-        try:
-            print(f"Test relè {self.relay_id}...")
-            self._set_relay_state(True)
-            time.sleep(0.1)
-            self._set_relay_state(False)
-            print(f"✅ Test relè {self.relay_id} OK")
-        except Exception as e:
-            print(f"⚠️ Test relè {self.relay_id}: {e}")
-    
     def activate(self, duration=None):
-        """Attiva relè per durata specificata"""
+        """Attiva relè"""
         if not self.is_initialized:
             return False
         
         duration = duration or self.active_time
         
         with self._lock:
-            # Stop thread precedente se attivo
+            # Interrompi thread precedente
             if self.is_active and self._current_thread:
-                print(f"Relè {self.relay_id}: Stop thread precedente")
                 self._current_thread = None
             
             self.is_active = True
@@ -97,122 +82,95 @@ class RelayController:
         current_thread = threading.current_thread()
         
         try:
-            # Attiva relè
+            # Attiva
             self._set_relay_state(True)
             print(f"Relè {self.relay_id}: ON per {duration}s")
             
-            # Attesa con controllo interruzione
+            # Aspetta con controllo interruzione
             elapsed = 0
             while elapsed < duration:
                 with self._lock:
                     if self._current_thread != current_thread:
-                        print(f"Relè {self.relay_id}: Thread interrotto")
                         return
                 
                 sleep_time = min(0.1, duration - elapsed)
                 time.sleep(sleep_time)
                 elapsed += sleep_time
             
-            # Disattiva relè
+            # Disattiva
             with self._lock:
                 if self._current_thread == current_thread:
                     self._set_relay_state(False)
                     self.is_active = False
                     self._current_thread = None
-                    print(f"Relè {self.relay_id}: OFF (automatico)")
+                    print(f"Relè {self.relay_id}: OFF")
                 
         except Exception as e:
             print(f"Errore thread relè {self.relay_id}: {e}")
+            self._set_relay_state(False)
             with self._lock:
                 self.is_active = False
                 self._current_thread = None
-            self._set_relay_state(False)
     
     def _set_relay_state(self, active):
-        """Imposta stato GPIO con gestione sicura"""
+        """Imposta stato GPIO"""
         try:
             if active:
                 level = GPIO.LOW if self.active_low else GPIO.HIGH
             else:
                 level = GPIO.HIGH if self.active_low else GPIO.LOW
             
-            safe_gpio_output(self.gpio_pin, level)
+            GPIO.output(self.gpio_pin, level)
             
         except Exception as e:
             print(f"Errore GPIO {self.gpio_pin}: {e}")
     
-    def force_off_immediate(self):
-        """Spegnimento immediato garantito"""
+    def force_off(self):
+        """Spegne immediatamente"""
         try:
             with self._lock:
                 self.is_active = False
                 self._current_thread = None
             
             if self.is_initialized:
-                # Spegni con GPIO sicuro
                 safe_level = GPIO.HIGH if self.active_low else GPIO.LOW
-                
-                if safe_gpio_output(self.gpio_pin, safe_level):
-                    print(f"✅ Relè {self.relay_id}: Spento")
-                else:
-                    # Fallback con emergency stop
-                    emergency_gpio_stop(self.gpio_pin)
-                    print(f"🔴 Relè {self.relay_id}: Emergency stop")
+                GPIO.output(self.gpio_pin, safe_level)
+                print(f"Relè {self.relay_id}: Spento forzatamente")
             
         except Exception as e:
-            print(f"Warning spegnimento relè {self.relay_id}: {e}")
-    
-    def force_off(self):
-        """Alias per compatibilità"""
-        self.force_off_immediate()
+            # Se GPIO normale fallisce, prova emergency
+            try:
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setup(self.gpio_pin, GPIO.OUT)
+                GPIO.output(self.gpio_pin, GPIO.LOW)
+                print(f"Relè {self.relay_id}: Emergency stop")
+            except:
+                print(f"Warning: Impossibile spegnere relè {self.relay_id}")
     
     def reset_to_initial_state(self):
         """Ripristina stato sicuro"""
-        self.force_off_immediate()
+        self.force_off()
     
     def get_status(self):
         """Status relè"""
-        gpio_state = "UNKNOWN"
-        try:
-            if self.is_initialized:
-                state = safe_gpio_input(self.gpio_pin)
-                if state is not None:
-                    gpio_state = "HIGH" if state else "LOW"
-        except:
-            pass
-            
         return {
             'relay_id': self.relay_id,
             'initialized': self.is_initialized,
             'active': self.is_active,
             'pin': self.gpio_pin,
             'active_low': self.active_low,
-            'duration': self.active_time,
-            'gpio_state': gpio_state
+            'duration': self.active_time
         }
     
     def cleanup(self):
-        """Cleanup completo"""
+        """Cleanup"""
         try:
-            print(f"🧹 Cleanup relè {self.relay_id}...")
-            
-            # Stop thread
             with self._lock:
                 self.is_active = False
                 self._current_thread = None
             
-            # Spegni relè
-            self.force_off_immediate()
-            
-            print(f"✅ Cleanup relè {self.relay_id} completato")
+            self.force_off()
+            print(f"Cleanup relè {self.relay_id} completato")
             
         except Exception as e:
-            print(f"⚠️ Warning cleanup relè {self.relay_id}: {e}")
-    
-    def __del__(self):
-        """Destructor silenzioso"""
-        try:
-            if self.is_initialized:
-                emergency_gpio_stop(self.gpio_pin)
-        except:
-            pass
+            print(f"Warning cleanup relè {self.relay_id}: {e}")
