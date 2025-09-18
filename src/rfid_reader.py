@@ -10,7 +10,10 @@ from config import Config
 class RFIDReader:
     """Classe per gestire il lettore RFID RC522"""
     
-    def __init__(self):
+    def __init__(self, reader_id="default", rst_pin=None, sda_pin=None):
+        self.reader_id = reader_id
+        self.rst_pin = rst_pin or Config.RFID_IN_RST_PIN
+        self.sda_pin = sda_pin or Config.RFID_IN_SDA_PIN
         self.reader = None
         self.is_initialized = False
     

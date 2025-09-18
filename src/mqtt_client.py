@@ -242,12 +242,13 @@ class MQTTClient:
             payload = {
                 "card_uid": card_info.get('uid_formatted'),
                 "identificativo_tornello": Config.TORNELLO_ID,
-                "direzione": Config.DIREZIONE,
+                "direzione": card_info.get('direction', 'unknown'),  # Usa la direzione dalla card
                 "timestamp": datetime.now().isoformat(),
                 "raw_id": str(card_info.get('raw_id')),
                 "card_data": card_info.get('data'),
                 "hex_id": card_info.get('uid_hex'),
-                "auth_required": Config.AUTH_ENABLED
+                "auth_required": Config.AUTH_ENABLED,
+                "reader_id": card_info.get('reader_id', 'unknown')
             }
             
             # Converte in JSON
