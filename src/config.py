@@ -121,6 +121,15 @@ class Config:
     
     # RFID Debounce
     RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
+
+    # RFID Debounce
+    RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
+    
+    # Configurazione formato UID
+    UID_FORMAT_MODE = os.getenv('UID_FORMAT_MODE', 'remove_suffix')
+    UID_CHARS_COUNT = int(os.getenv('UID_CHARS_COUNT', 2))
+    UID_TARGET_LENGTH = int(os.getenv('UID_TARGET_LENGTH', 8))
+    UID_DEBUG_MODE = os.getenv('UID_DEBUG_MODE', 'True').lower() == 'true'
     
     @classmethod
     def get_mqtt_topic(cls, action="badge"):

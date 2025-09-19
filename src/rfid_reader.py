@@ -58,12 +58,50 @@ class RFIDReader:
             return None, None
     
     def format_card_uid(self, card_id):
-        """Formatta UID card"""
+        """Formatta UID card secondo configurazione .env"""
         if card_id is None:
             return None
+        
         try:
-            return hex(card_id)[2:].upper().zfill(8)
-        except:
+            # Converte in hex base
+            hex_str = hex(card_id)[2:].upper()
+            original_uid = hex_str
+            
+            # Applica formato secondo configurazione
+            if Config.UID_FORMAT_MODE == 'remove_suffix':
+                # Rimuove N caratteri dalla fine
+                if len(hex_str) > Config.UID_CHARS_COUNT:
+                    formatted_uid = hex_str[:-Config.UID_CHARS_COUNT]
+                else:
+                    formatted_uid = hex_str
+                    
+            elif Config.UID_FORMAT_MODE == 'truncate':
+                # Prende primi N caratteri
+                formatted_uid = hex_str[:Config.UID_CHARS_COUNT]
+                
+            elif Config.UID_FORMAT_MODE == 'take_last':
+                # Prende ultimi N caratteri
+                formatted_uid = hex_str[-Config.UID_CHARS_COUNT:]
+                
+            elif Config.UID_FORMAT_MODE == 'fixed_length':
+                # Tronca o fa padding a lunghezza fissa
+                if len(hex_str) > Config.UID_TARGET_LENGTH:
+                    formatted_uid = hex_str[:Config.UID_TARGET_LENGTH]
+                else:
+                    formatted_uid = hex_str.zfill(Config.UID_TARGET_LENGTH)
+                    
+            else:
+                # Modalità legacy (default zfill 8)
+                formatted_uid = hex_str.zfill(8)
+            
+            # Debug se abilitato
+            if Config.UID_DEBUG_MODE and original_uid != formatted_uid:
+                print(f"🔧 UID Transform: {original_uid} → {formatted_uid} (mode: {Config.UID_FORMAT_MODE})")
+            
+            return formatted_uid
+            
+        except Exception as e:
+            print(f"❌ Errore format UID: {e}")
             return str(card_id)
     
     def get_card_info(self, card_id, card_data):
