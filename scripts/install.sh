@@ -100,6 +100,11 @@ mkdir -p "$PROJECT_DIR/tools"
 [ -f "$SCRIPT_DIR/src/log_viewer.py" ] && cp "$SCRIPT_DIR/src/log_viewer.py" "$PROJECT_DIR/tools/"
 [ -f "$SCRIPT_DIR/emergency_stop.py" ] && cp "$SCRIPT_DIR/emergency_stop.py" "$PROJECT_DIR/tools/"
 
+# Rendi eseguibili solo se ci sono file .py
+if ls "$PROJECT_DIR/tools/"*.py >/dev/null 2>&1; then
+    chmod +x "$PROJECT_DIR/tools/"*.py
+fi
+
 # Crea directory scripts
 mkdir -p "$PROJECT_DIR/scripts"
 cp -r "$SCRIPT_DIR/scripts"/* "$PROJECT_DIR/scripts/" 2>/dev/null || true
