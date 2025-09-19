@@ -1,4 +1,14 @@
+# RFID Access Control System Dependencies
+# Versione ottimizzata per Raspberry Pi
+
+# Core RFID Support
 mfrc522==0.0.7
+
+# GPIO Control (Raspberry Pi)
 RPi.GPIO==0.7.1
+
+# MQTT Communication
 paho-mqtt==1.6.1
+
+# Configuration Management
 python-dotenv==1.0.0
