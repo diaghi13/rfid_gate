@@ -229,8 +229,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
+# User=$SERVICE_USER
+# Group=$SERVICE_USER
+User=root
+Group=root
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin
 ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/src/main.py
