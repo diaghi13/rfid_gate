@@ -90,20 +90,16 @@ echo -e "${YELLOW}📋 Copia file progetto...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Copia struttura src
+echo -e "${YELLOW}📋 Copia struttura src${NC}"
 cp -r "$SCRIPT_DIR/src" "$PROJECT_DIR/"
 cp "$SCRIPT_DIR/requirements.txt" "$PROJECT_DIR/"
 
 # Crea directory tools e copia
-# mkdir -p "$PROJECT_DIR/tools"
-# [ -f "$SCRIPT_DIR/src/offline_utils.py" ] && cp "$SCRIPT_DIR/src/offline_utils.py" "$PROJECT_DIR/tools/"
-# [ -f "$SCRIPT_DIR/src/manual_open_tool.py" ] && cp "$SCRIPT_DIR/src/manual_open_tool.py" "$PROJECT_DIR/tools/"
-# [ -f "$SCRIPT_DIR/src/log_viewer.py" ] && cp "$SCRIPT_DIR/src/log_viewer.py" "$PROJECT_DIR/tools/"
-# [ -f "$SCRIPT_DIR/emergency_stop.py" ] && cp "$SCRIPT_DIR/emergency_stop.py" "$PROJECT_DIR/tools/"
-
-# # Rendi eseguibili solo se ci sono file .py
-# if ls "$PROJECT_DIR/tools/"*.py >/dev/null 2>&1; then
-#     chmod +x "$PROJECT_DIR/tools/"*.py
-# fi
+mkdir -p "$PROJECT_DIR/tools"
+[ -f "$SCRIPT_DIR/src/offline_utils.py" ] && cp "$SCRIPT_DIR/src/offline_utils.py" "$PROJECT_DIR/tools/"
+[ -f "$SCRIPT_DIR/src/manual_open_tool.py" ] && cp "$SCRIPT_DIR/src/manual_open_tool.py" "$PROJECT_DIR/tools/"
+[ -f "$SCRIPT_DIR/src/log_viewer.py" ] && cp "$SCRIPT_DIR/src/log_viewer.py" "$PROJECT_DIR/tools/"
+[ -f "$SCRIPT_DIR/emergency_stop.py" ] && cp "$SCRIPT_DIR/emergency_stop.py" "$PROJECT_DIR/tools/"
 
 # Crea directory scripts
 mkdir -p "$PROJECT_DIR/scripts"
