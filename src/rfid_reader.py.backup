@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lettore RFID con debounce per evitare letture multiple - VERSIONE CORRETTA PER DOPPIO RFID
+Lettore RFID con debounce per evitare letture multiple
 """
 import RPi.GPIO as GPIO
 from mfrc522 import SimpleMFRC522
@@ -8,7 +8,7 @@ import time
 from config import Config
 
 class RFIDReader:
-    """Lettore RFID con debounce - VERSIONE CORRETTA"""
+    """Lettore RFID con debounce"""
     
     def __init__(self, reader_id="default", rst_pin=None, sda_pin=None):
         self.reader_id = reader_id
@@ -21,41 +21,25 @@ class RFIDReader:
         self.last_card_id = None
         self.last_read_time = 0
         self.debounce_time = Config.RFID_DEBOUNCE_TIME
-        
-        print(f"🔧 RFID Reader {self.reader_id}: RST={self.rst_pin}, SDA={self.sda_pin}")
     
     def initialize(self):
-        """Inizializza lettore con pin specifici"""
+        """Inizializza lettore"""
         try:
-            print(f"📡 Inizializzazione RFID {self.reader_id} (RST:{self.rst_pin}, SDA:{self.sda_pin})")
-            
-            # CRITICO: NON chiamare GPIO.setmode() qui - può causare conflitti
-            # Lascia che sia il manager principale a gestire GPIO.setmode()
-            
-            # Crea reader con pin specifici
-            self.reader = SimpleMFRC522(rst=self.rst_pin, cs=self.sda_pin)
-            
+            GPIO.setmode(GPIO.BCM)
+            self.reader = SimpleMFRC522()
             self.is_initialized = True
-            print(f"✅ RFID {self.reader_id} inizializzato")
             return True
-            
         except Exception as e:
-            print(f"❌ Errore init RFID {self.reader_id}: {e}")
+            print(f"Errore init RFID {self.reader_id}: {e}")
             return False
     
     def read_card(self):
-        """Legge card con debounce e gestione timeout"""
+        """Legge card con debounce"""
         if not self.is_initialized:
             return None, None
         
         try:
-            # CRITICO: Usa read_no_block() per evitare blocchi infiniti
-            # che possono impedire il funzionamento dell'altro lettore
-            card_id, card_data = self.reader.read_no_block()
-            
-            if card_id is None:
-                return None, None
-            
+            card_id, card_data = self.reader.read()
             current_time = time.time()
             
             # Debounce: ignora se stessa card letta di recente
@@ -67,14 +51,10 @@ class RFIDReader:
             self.last_card_id = card_id
             self.last_read_time = current_time
             
-            print(f"📱 RFID {self.reader_id}: Card {hex(card_id)} rilevata")
-            
             return card_id, card_data
             
         except Exception as e:
-            # Non stampare errori continui - solo errori significativi
-            if "Timeout" not in str(e) and "No card" not in str(e):
-                print(f"⚠️ Errore lettura RFID {self.reader_id}: {e}")
+            print(f"Errore lettura RFID {self.reader_id}: {e}")
             return None, None
     
     def format_card_uid(self, card_id):
@@ -109,13 +89,6 @@ class RFIDReader:
                     formatted_uid = hex_str[:Config.UID_TARGET_LENGTH]
                 else:
                     formatted_uid = hex_str.zfill(Config.UID_TARGET_LENGTH)
-            
-            elif Config.UID_FORMAT_MODE == 'compatible':
-                # Modalità compatibile - rimuove ultimi 2 caratteri per default
-                if len(hex_str) > 2:
-                    formatted_uid = hex_str[:-2]
-                else:
-                    formatted_uid = hex_str
                     
             else:
                 # Modalità legacy (default zfill 8)
@@ -123,12 +96,12 @@ class RFIDReader:
             
             # Debug se abilitato
             if Config.UID_DEBUG_MODE and original_uid != formatted_uid:
-                print(f"🔧 UID Transform {self.reader_id}: {original_uid} → {formatted_uid} (mode: {Config.UID_FORMAT_MODE})")
+                print(f"🔧 UID Transform: {original_uid} → {formatted_uid} (mode: {Config.UID_FORMAT_MODE})")
             
             return formatted_uid
             
         except Exception as e:
-            print(f"❌ Errore format UID {self.reader_id}: {e}")
+            print(f"❌ Errore format UID: {e}")
             return str(card_id)
     
     def get_card_info(self, card_id, card_data):
@@ -142,43 +115,21 @@ class RFIDReader:
         }
     
     def test_connection(self):
-        """Test connessione modulo con pin specifici"""
+        """Test connessione modulo"""
         if not self.is_initialized:
             return False
-        
         try:
-            print(f"🧪 Test connessione RFID {self.reader_id}...")
-            
-            # Test rapido - tenta una lettura non bloccante
-            test_reader = SimpleMFRC522(rst=self.rst_pin, cs=self.sda_pin)
-            
-            # Tenta una lettura veloce per verificare la connessione
-            try:
-                test_reader.read_no_block()
-                print(f"✅ Test RFID {self.reader_id} OK")
-                return True
-            except Exception as e:
-                if "timeout" in str(e).lower() or "no card" in str(e).lower():
-                    # Timeout è normale se non c'è card - significa che il lettore funziona
-                    print(f"✅ Test RFID {self.reader_id} OK (no card presente)")
-                    return True
-                else:
-                    print(f"❌ Test RFID {self.reader_id} fallito: {e}")
-                    return False
-            finally:
-                del test_reader
-                
+            test_reader = SimpleMFRC522()
+            del test_reader
+            return True
         except Exception as e:
-            print(f"❌ Test RFID {self.reader_id} fallito: {e}")
+            print(f"Test RFID {self.reader_id} fallito: {e}")
             return False
     
     def cleanup(self):
-        """Cleanup specifico per questo lettore"""
+        """Cleanup"""
         try:
-            if self.is_initialized and self.reader:
-                print(f"🧹 Cleanup RFID {self.reader_id}")
-                # Non chiamare GPIO.cleanup() qui - lasciare al manager principale
-                self.reader = None
-                self.is_initialized = False
-        except Exception as e:
-            print(f"⚠️ Errore cleanup RFID {self.reader_id}: {e}")
+            if self.is_initialized:
+                GPIO.cleanup()
+        except:
+            pass
