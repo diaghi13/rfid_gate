@@ -57,7 +57,6 @@ apt install -y \
     mosquitto-clients \
     build-essential \
     python3-spidev \
-    spidev \
     --no-install-recommends
 
 # Abilita SPI se non già fatto
