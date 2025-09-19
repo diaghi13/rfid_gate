@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Modulo per la gestione della modalità offline e sincronizzazione
+VERSIONE CORRETTA - Fix bug autorizzazione offline
 """
 
 import json
@@ -13,7 +14,7 @@ from queue import Queue, Empty
 from config import Config
 
 class OfflineManager:
-    """Classe per gestire la modalità offline e la sincronizzazione"""
+    """Classe per gestire la modalità offline e la sincronizzazione - VERSIONE CORRETTA"""
     
     def __init__(self, mqtt_client=None, logger=None):
         self.mqtt_client = mqtt_client
@@ -39,6 +40,8 @@ class OfflineManager:
         # Statistiche
         self.stats = {
             'total_offline_accesses': 0,
+            'offline_authorized': 0,
+            'offline_denied': 0,
             'pending_sync': self.offline_queue.qsize(),
             'last_sync_attempt': None,
             'last_successful_sync': None,
@@ -63,6 +66,7 @@ class OfflineManager:
             print(f"✅ Offline Manager inizializzato")
             print(f"   📊 Elementi in coda: {self.offline_queue.qsize()}")
             print(f"   🌐 Stato connessione: {'Online' if self.is_online else 'Offline'}")
+            print(f"   🚪 Accesso offline: {'Consentito' if Config.OFFLINE_ALLOW_ACCESS else 'Negato'}")
             
             return True
             
@@ -105,7 +109,6 @@ class OfflineManager:
         """Controlla se c'è connessione internet e MQTT"""
         try:
             # Prima verifica connessione internet generica
-            import socket
             socket.create_connection(("8.8.8.8", 53), timeout=3)
             
             # Poi testa il broker MQTT specifico
@@ -214,7 +217,15 @@ class OfflineManager:
             return self._handle_offline_access(card_info)
     
     def _handle_offline_access(self, card_info):
-        """Gestisce l'accesso in modalità offline"""
+        """
+        Gestisce l'accesso in modalità offline - VERSIONE CORRETTA
+        
+        COMPORTAMENTO CORRETTO:
+        1. Decide localmente se autorizzare (basato su OFFLINE_ALLOW_ACCESS)
+        2. Apre/non apre il tornello IMMEDIATAMENTE
+        3. Salva evento per sync futura (solo audit)
+        4. Quando torna online, sync è solo per log/audit (NO riapertura)
+        """
         if not Config.OFFLINE_MODE_ENABLED:
             return {
                 'authorized': False,
@@ -222,38 +233,54 @@ class OfflineManager:
                 'offline_mode': False
             }
         
-        if not Config.OFFLINE_ALLOW_ACCESS:
-            return {
-                'authorized': False,
-                'error': 'Accesso negato in modalità offline',
-                'offline_mode': True
-            }
+        # DECISIONE LOCALE IMMEDIATA
+        if Config.OFFLINE_ALLOW_ACCESS:
+            # Modalità permissiva - autorizza accesso
+            authorized = True
+            message = "Accesso offline autorizzato - modalità permissiva"
+            print("🟡 MODALITÀ OFFLINE - Accesso CONSENTITO (locale)")
+        else:
+            # Modalità restrittiva - nega accesso  
+            authorized = False
+            message = "Accesso negato - sistema offline modalità restrittiva"
+            print("🔴 MODALITÀ OFFLINE - Accesso NEGATO (locale)")
         
-        # In modalità offline, consentiamo l'accesso
-        print("🟡 MODALITÀ OFFLINE - Accesso consentito")
-        
-        # Aggiungi alla coda per sync successiva
-        self._add_to_offline_queue(card_info)
+        # Salva SEMPRE per audit futuro (sia autorizzati che negati)
+        self._add_to_offline_queue(card_info, authorized, message)
         
         # Aggiorna statistiche
         self.stats['total_offline_accesses'] += 1
+        if authorized:
+            self.stats['offline_authorized'] += 1
+        else:
+            self.stats['offline_denied'] += 1
         self.stats['pending_sync'] = self.offline_queue.qsize()
         
         return {
-            'authorized': True,
-            'message': 'Accesso offline autorizzato - Sincronizzazione pending',
-            'offline_mode': True
+            'authorized': authorized,      # DECISIONE LOCALE IMMEDIATA
+            'message': message,
+            'offline_mode': True,
+            'offline_decision': True,      # Flag importante: decisione presa localmente
+            'local_timestamp': datetime.now().isoformat()
         }
     
-    def _add_to_offline_queue(self, card_info):
-        """Aggiunge un accesso alla coda offline"""
+    def _add_to_offline_queue(self, card_info, authorized, message):
+        """
+        Aggiunge un accesso alla coda offline - VERSIONE CORRETTA
+        
+        IMPORTANTE: Salva evento con decisione locale per audit futuro
+        """
         try:
             # Prepara i dati per la coda
             offline_entry = {
                 'timestamp': datetime.now().isoformat(),
                 'card_info': card_info,
+                'offline_authorized': authorized,    # Decisione locale
+                'offline_message': message,
                 'sync_attempts': 0,
-                'created_offline': True
+                'created_offline': True,
+                'sync_type': 'audit_only',          # Solo per audit/log
+                'action_completed': True            # Azione già eseguita localmente
             }
             
             # Controlla se la coda è piena
@@ -270,7 +297,7 @@ class OfflineManager:
             # Salva su file
             self.save_offline_queue()
             
-            print(f"💾 Accesso salvato in coda offline ({self.offline_queue.qsize()} elementi)")
+            print(f"💾 Evento offline salvato per audit futuro ({self.offline_queue.qsize()} in coda)")
             
         except Exception as e:
             print(f"❌ Errore salvataggio coda offline: {e}")
@@ -278,7 +305,12 @@ class OfflineManager:
                 self.logger.log_system_event("offline_queue_error", str(e), "error")
     
     def sync_offline_data(self):
-        """Sincronizza i dati offline con il server"""
+        """
+        Sincronizza i dati offline con il server - VERSIONE CORRETTA
+        
+        IMPORTANTE: Questa sync è SOLO per audit/log.
+        NON invia comandi che possono riaprire il tornello!
+        """
         if not self.is_online or not Config.OFFLINE_SYNC_ENABLED:
             return
         
@@ -289,7 +321,7 @@ class OfflineManager:
         synced_count = 0
         failed_count = 0
         
-        print(f"📤 Inizio sincronizzazione offline ({self.offline_queue.qsize()} elementi)")
+        print(f"📤 Sync audit offline ({self.offline_queue.qsize()} eventi)")
         
         # Lista temporanea per elementi falliti
         failed_items = []
@@ -300,15 +332,36 @@ class OfflineManager:
                 offline_entry = self.offline_queue.get_nowait()
                 card_info = offline_entry['card_info']
                 
-                # Tenta la sincronizzazione
+                # Prepara payload di AUDIT (non comando)
+                audit_payload = {
+                    'card_uid': card_info['uid_formatted'],
+                    'identificativo_tornello': Config.TORNELLO_ID,
+                    'direzione': card_info['direction'],
+                    'timestamp': offline_entry['timestamp'],
+                    'raw_id': str(card_info['raw_id']),
+                    'card_data': card_info.get('data', ''),
+                    'hex_id': card_info.get('uid_hex', ''),
+                    'reader_id': card_info.get('reader_id', 'unknown'),
+                    
+                    # Campi specifici offline
+                    'offline_authorized': offline_entry['offline_authorized'],
+                    'offline_message': offline_entry['offline_message'],
+                    'sync_type': 'offline_audit',    # Tipo speciale
+                    'action_completed': True,        # Azione già completata
+                    'sync_timestamp': datetime.now().isoformat()
+                }
+                
+                # Invia su topic SEPARATO per audit
+                audit_topic = f"gate/{Config.TORNELLO_ID}/offline_audit"
+                
                 try:
                     if self.mqtt_client and self.mqtt_client.is_connected:
-                        # Invia solo i dati (senza aspettare auth response)
-                        success = self.mqtt_client.publish_card_data(card_info)
+                        json_payload = json.dumps(audit_payload, ensure_ascii=False)
+                        result = self.mqtt_client.client.publish(audit_topic, json_payload, qos=1)
                         
-                        if success:
+                        if result.rc == 0:
                             synced_count += 1
-                            print(f"✅ Sincronizzato: {card_info.get('uid_formatted')} ({synced_count})")
+                            print(f"✅ Audit sync: {card_info['uid_formatted']} ({synced_count})")
                         else:
                             offline_entry['sync_attempts'] += 1
                             failed_items.append(offline_entry)
@@ -352,15 +405,15 @@ class OfflineManager:
         
         # Report finale
         if synced_count > 0 or failed_count > 0:
-            print(f"📊 Sincronizzazione completata:")
+            print(f"📊 Sync audit completata:")
             print(f"   ✅ Sincronizzati: {synced_count}")
             print(f"   ❌ Falliti: {failed_count}")
             print(f"   ⏳ Rimanenti in coda: {self.offline_queue.qsize()}")
             
             if self.logger:
                 self.logger.log_system_event(
-                    "offline_sync_completed", 
-                    f"Sync: {synced_count} ok, {failed_count} falliti, {self.offline_queue.qsize()} rimanenti"
+                    "offline_audit_sync_completed", 
+                    f"Audit sync: {synced_count} ok, {failed_count} falliti, {self.offline_queue.qsize()} rimanenti"
                 )
     
     def save_offline_queue(self):
@@ -407,7 +460,7 @@ class OfflineManager:
                 self.offline_queue.put(item)
             
             if queue_data:
-                print(f"📥 Caricati {len(queue_data)} elementi dalla coda offline persistente")
+                print(f"📥 Caricati {len(queue_data)} eventi dalla coda offline persistente")
                 
         except Exception as e:
             print(f"⚠️ Errore caricamento coda offline: {e}")
@@ -449,7 +502,7 @@ class OfflineManager:
             print("🔴 Impossibile sincronizzare: sistema offline")
             return False
         
-        print("🔄 Forzando sincronizzazione...")
+        print("🔄 Forzando sync audit...")
         self.sync_offline_data()
         return True
     
