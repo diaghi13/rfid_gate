@@ -102,6 +102,25 @@ ENABLE_CONSOLE_LOG=False           # Mostra log su console
 RFID_DEBOUNCE_TIME=2.0             # Secondi tra letture della stessa card
 
 # ===========================================
+# 🔧 CONFIGURAZIONE FORMATO UID CARD
+# ===========================================
+# Modalità formato UID:
+# - 'remove_suffix': Rimuove N caratteri dalla fine (es. C67BD90561 → C67BD905)
+# - 'truncate': Prende primi N caratteri (es. C67BD90561 → C67BD905)
+# - 'take_last': Prende ultimi N caratteri
+# - 'fixed_length': Padding/truncate a lunghezza fissa
+UID_FORMAT_MODE=remove_suffix
+
+# Numero caratteri da rimuovere/prendere (dipende da modalità)
+UID_CHARS_COUNT=2
+
+# Lunghezza finale desiderata (per fixed_length mode)
+UID_TARGET_LENGTH=8
+
+# Debug: mostra conversioni UID nei log
+UID_DEBUG_MODE=True
+
+# ===========================================
 # 🔧 ESEMPI CONFIGURAZIONI COMUNI
 # ===========================================
 

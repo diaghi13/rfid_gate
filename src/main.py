@@ -190,12 +190,18 @@ class AccessControlSystem:
                     authorized = auth_result.get('authorized', False)
                     offline_mode = auth_result.get('offline_mode', False)
                     message = auth_result.get('message', auth_result.get('error', ''))
+                    access_type = auth_result.get('access_type', 'online')
                     
                     mode_text = "OFFLINE" if offline_mode else "ONLINE"
                     auth_text = "✅ AUTORIZZATO" if authorized else "❌ NEGATO"
                     print(f"🔐 {auth_text} ({mode_text}) - {auth_time}ms")
                     if message:
                         print(f"💬 {message}")
+                    
+                    # Log specifico per accessi offline
+                    if offline_mode and Config.OFFLINE_MODE_ENABLED:
+                        access_mode = "PERMISSIVO" if Config.OFFLINE_ALLOW_ACCESS else "RESTRITTIVO"
+                        print(f"🌐 Modalità offline {access_mode} attiva")
                     
                     # Attiva relè se autorizzato
                     relay_success = False

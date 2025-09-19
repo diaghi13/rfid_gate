@@ -261,7 +261,8 @@ class OfflineManager:
             'message': message,
             'offline_mode': True,
             'offline_decision': True,      # Flag importante: decisione presa localmente
-            'local_timestamp': datetime.now().isoformat()
+            'local_timestamp': datetime.now().isoformat(),
+            'access_type': 'offline_local'  # Identifica tipo accesso
         }
     
     def _add_to_offline_queue(self, card_info, authorized, message):
