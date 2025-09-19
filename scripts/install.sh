@@ -90,7 +90,6 @@ echo -e "${YELLOW}📋 Copia file progetto...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Copia struttura src
-echo -e "${YELLOW}📋 Copia struttura src${NC}"
 cp -r "$SCRIPT_DIR/src" "$PROJECT_DIR/"
 cp "$SCRIPT_DIR/requirements.txt" "$PROJECT_DIR/"
 
