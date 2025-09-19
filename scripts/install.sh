@@ -108,6 +108,7 @@ cp -r "$SCRIPT_DIR/scripts"/* "$PROJECT_DIR/scripts/" 2>/dev/null || true
 mkdir -p "$PROJECT_DIR/config"
 [ -f "$SCRIPT_DIR/config_examples.md" ] && cp "$SCRIPT_DIR/config_examples.md" "$PROJECT_DIR/config/"
 
+
 # Crea directory logs
 mkdir -p "$PROJECT_DIR/logs"
 chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/logs"
