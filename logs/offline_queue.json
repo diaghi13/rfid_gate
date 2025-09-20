@@ -1,0 +1,177 @@
+{
+  "saved_at": "2025-09-20T16:48:13.338753",
+  "queue_size": 9,
+  "queue_data": [
+    {
+      "timestamp": "2025-09-20T16:45:14.048672",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD0002",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Card",
+        "data_length": 9,
+        "direction": "out",
+        "reader_id": "test_reader",
+        "timestamp": 1758379514.048656
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:45:14.161026",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD0003",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Card",
+        "data_length": 9,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379514.161014
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:45:13.942950",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "ABCDEF12",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Card",
+        "data_length": 9,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379513.942944
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:48:08.986989",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "TESTCARD",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Offline",
+        "data_length": 12,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379688.9869812
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:48:08.990197",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD001",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Offline",
+        "data_length": 12,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379688.9901938
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:48:09.092665",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD002",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Offline",
+        "data_length": 12,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379689.092593
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:48:09.193992",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD003",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Offline",
+        "data_length": 12,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379689.1939049
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:45:13.945219",
+      "card_info": {
+        "raw_id": 123456789,
+        "uid_formatted": "CARD0001",
+        "uid_hex": "0x75bcd15",
+        "data": "Test Card",
+        "data_length": 9,
+        "direction": "in",
+        "reader_id": "test_reader",
+        "timestamp": 1758379513.945216
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    },
+    {
+      "timestamp": "2025-09-20T16:48:13.338194",
+      "card_info": {
+        "raw_id": 2055674891,
+        "uid_formatted": "REALCARD",
+        "uid_hex": "0x7a7c8c0b",
+        "data": "Real User Card",
+        "data_length": 14,
+        "direction": "in",
+        "reader_id": "in",
+        "timestamp": 1758379693.33819
+      },
+      "offline_authorized": true,
+      "offline_message": "Accesso offline autorizzato - modalità permissiva",
+      "sync_attempts": 0,
+      "created_offline": true,
+      "sync_type": "audit_only",
+      "action_completed": true
+    }
+  ]
+}
