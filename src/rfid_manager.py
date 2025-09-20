@@ -182,57 +182,56 @@ class RFIDManager:
         self.reader_threads.clear()
     
     def _reader_thread(self, direction, reader):
-        """Thread di lettura per un singolo lettore RFID - VERSIONE OTTIMIZZATA"""
+        """Thread di lettura per un singolo lettore RFID - VERSIONE THREAD-SAFE"""
         print(f"📡 Thread RFID {direction.upper()} in ascolto...")
         
         consecutive_errors = 0
         max_consecutive_errors = 5
         
+        # Offset temporale per alternare letture e ridurre conflitti SPI
+        thread_offset = {"in": 0, "out": 0.1}  # OUT inizia 100ms dopo IN
+        time.sleep(thread_offset.get(direction, 0))
+        
         while self.running:
             try:
-                # Legge una card (non bloccante)
+                # Legge card (ora thread-safe con lock interno)
                 card_id, card_data = reader.read_card()
                 
                 if card_id is not None:
-                    # Reset contatore errori
                     consecutive_errors = 0
                     
-                    # Ottiene le informazioni complete della card
                     card_info = reader.get_card_info(card_id, card_data)
-                    
-                    # Aggiunge la direzione alle informazioni
                     card_info['direction'] = direction
                     card_info['reader_id'] = reader.reader_id
                     card_info['timestamp'] = time.time()
                     
-                    # Mette la card nella coda
                     try:
                         self.card_queue.put(card_info, block=False)
                         print(f"📱 Card rilevata su lettore {direction.upper()}: {card_info['uid_formatted']}")
                     except:
-                        print(f"⚠️ Coda card piena - card {card_info['uid_formatted']} ignorata")
+                        print(f"⚠️ Coda card piena - card ignorata")
                 
-                # Pausa ottimizzata per doppio RFID
-                # Pausa più breve per permettere a entrambi i lettori di funzionare
-                time.sleep(0.05)  # 50ms invece di 100ms
+                # Timing alternato per evitare conflitti SPI
+                if direction == "in":
+                    time.sleep(0.1)  # Lettore IN: pausa normale
+                else:
+                    time.sleep(0.15)  # Lettore OUT: pausa leggermente più lunga
                 
             except Exception as e:
-                if self.running:  # Solo se non stiamo fermando il sistema
+                if self.running:
                     consecutive_errors += 1
                     
-                    # Non spammare errori - solo errori significativi
                     if consecutive_errors <= 3:
                         error_msg = str(e)
-                        if "timeout" not in error_msg.lower() and "no card" not in error_msg.lower():
-                            print(f"⚠️ Errore nel thread RFID {direction.upper()}: {e}")
+                        if "timeout" not in error_msg.lower():
+                            print(f"⚠️ Errore RFID {direction.upper()}: {e}")
                     
-                    # Se troppi errori consecutivi, pausa più lunga
                     if consecutive_errors >= max_consecutive_errors:
-                        print(f"❌ Troppi errori consecutivi su RFID {direction.upper()}, pausa lunga...")
+                        print(f"❌ Troppi errori RFID {direction.upper()}, pausa lunga...")
                         time.sleep(2)
                         consecutive_errors = 0
                     else:
-                        time.sleep(0.1)
+                        time.sleep(0.2)
         
         print(f"🏁 Thread RFID {direction.upper()} terminato")
     
