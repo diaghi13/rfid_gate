@@ -1,8 +1,12 @@
 # RFID Access Control System Dependencies
 # Versione ottimizzata per Raspberry Pi
 
-# Core RFID Support
+# Core RFID Support - Versione compatibile
 mfrc522==0.0.7
+
+# Alternativa più stabile (se la precedente da problemi)
+# pip-autoremove mfrc522
+# pip install pi-rc522
 
 # GPIO Control (Raspberry Pi)
 RPi.GPIO==0.7.1

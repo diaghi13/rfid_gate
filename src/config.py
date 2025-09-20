@@ -121,9 +121,6 @@ class Config:
     
     # RFID Debounce
     RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
-
-    # RFID Debounce
-    RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
     
     # Configurazione formato UID
     UID_FORMAT_MODE = os.getenv('UID_FORMAT_MODE', 'remove_suffix')
