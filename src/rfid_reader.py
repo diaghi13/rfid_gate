@@ -32,8 +32,18 @@ class RFIDReader:
             # CRITICO: NON chiamare GPIO.setmode() qui - può causare conflitti
             # Lascia che sia il manager principale a gestire GPIO.setmode()
             
-            # Crea reader con pin specifici
-            self.reader = SimpleMFRC522(rst=self.rst_pin, cs=self.sda_pin)
+            # Importa MFRC522 base per configurazione pin personalizzata
+            from mfrc522 import MFRC522
+            
+            # Configura pin specifici per questo lettore
+            self.mfrc522_reader = MFRC522()
+            self.mfrc522_reader.RST = self.rst_pin
+            self.mfrc522_reader.SDA = self.sda_pin
+            
+            # Crea SimpleMFRC522 wrapper
+            self.reader = SimpleMFRC522()
+            # Sostituisci il reader interno con quello configurato
+            self.reader.READER = self.mfrc522_reader
             
             self.is_initialized = True
             print(f"✅ RFID {self.reader_id} inizializzato")
@@ -49,12 +59,33 @@ class RFIDReader:
             return None, None
         
         try:
-            # CRITICO: Usa read_no_block() per evitare blocchi infiniti
-            # che possono impedire il funzionamento dell'altro lettore
-            card_id, card_data = self.reader.read_no_block()
+            # Usa il metodo read standard con timeout corto
+            # per evitare blocchi infiniti che impediscono il funzionamento dell'altro lettore
             
-            if card_id is None:
+            # Salva configurazione GPIO attuale
+            old_rst = getattr(self.reader.READER, 'RST', None)
+            old_sda = getattr(self.reader.READER, 'SDA', None)
+            
+            # Imposta pin per questo lettore
+            self.reader.READER.RST = self.rst_pin
+            self.reader.READER.SDA = self.sda_pin
+            
+            # Inizializza SPI per questo lettore
+            self.reader.READER.spi_open()
+            self.reader.READER.init()
+            
+            # Tenta lettura rapida
+            card_id, card_data = self.reader.READER.read_no_halt()
+            
+            if card_id == 0:  # Nessuna card
                 return None, None
+            
+            # Leggi dati se card presente
+            if card_data is None:
+                try:
+                    card_data = self.reader.READER.read_string_data()
+                except:
+                    card_data = ""
             
             current_time = time.time()
             
@@ -73,9 +104,17 @@ class RFIDReader:
             
         except Exception as e:
             # Non stampare errori continui - solo errori significativi
-            if "Timeout" not in str(e) and "No card" not in str(e):
+            error_str = str(e).lower()
+            if "timeout" not in error_str and "no card" not in error_str and "error" in error_str:
                 print(f"⚠️ Errore lettura RFID {self.reader_id}: {e}")
             return None, None
+        finally:
+            # Cleanup SPI per questo lettore
+            try:
+                if hasattr(self.reader.READER, 'spi_close'):
+                    self.reader.READER.spi_close()
+            except:
+                pass
     
     def format_card_uid(self, card_id):
         """Formatta UID card secondo configurazione .env"""
@@ -149,24 +188,31 @@ class RFIDReader:
         try:
             print(f"🧪 Test connessione RFID {self.reader_id}...")
             
-            # Test rapido - tenta una lettura non bloccante
-            test_reader = SimpleMFRC522(rst=self.rst_pin, cs=self.sda_pin)
+            # Configura pin per test
+            self.reader.READER.RST = self.rst_pin
+            self.reader.READER.SDA = self.sda_pin
             
-            # Tenta una lettura veloce per verificare la connessione
+            # Test base: verifica che il modulo risponda
+            self.reader.READER.spi_open()
+            self.reader.READER.init()
+            
+            # Tenta una lettura veloce per verificare comunicazione
             try:
-                test_reader.read_no_block()
-                print(f"✅ Test RFID {self.reader_id} OK")
-                return True
-            except Exception as e:
-                if "timeout" in str(e).lower() or "no card" in str(e).lower():
-                    # Timeout è normale se non c'è card - significa che il lettore funziona
-                    print(f"✅ Test RFID {self.reader_id} OK (no card presente)")
-                    return True
-                else:
-                    print(f"❌ Test RFID {self.reader_id} fallito: {e}")
+                version = self.reader.READER.read(0x37)  # Registro versione
+                if version == 0x00 or version == 0xFF:
+                    print(f"❌ Test RFID {self.reader_id}: Modulo non risponde (version=0x{version:02X})")
                     return False
+                else:
+                    print(f"✅ Test RFID {self.reader_id} OK (version=0x{version:02X})")
+                    return True
+            except Exception as e:
+                print(f"❌ Test RFID {self.reader_id} fallito: {e}")
+                return False
             finally:
-                del test_reader
+                try:
+                    self.reader.READER.spi_close()
+                except:
+                    pass
                 
         except Exception as e:
             print(f"❌ Test RFID {self.reader_id} fallito: {e}")
