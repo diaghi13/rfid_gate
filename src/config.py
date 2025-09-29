@@ -122,6 +122,26 @@ class Config:
     # RFID Debounce
     RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
     
+    # RFID Reader Types - Supporto per MFRC522 e PN532
+    RFID_IN_READER_TYPE = os.getenv('RFID_IN_READER_TYPE', 'mfrc522')  # mfrc522, pn532
+    RFID_OUT_READER_TYPE = os.getenv('RFID_OUT_READER_TYPE', 'mfrc522')  # mfrc522, pn532
+    
+    # PN532 Configuration per lettore IN
+    RFID_IN_PN532_INTERFACE = os.getenv('RFID_IN_PN532_INTERFACE', 'i2c')  # i2c, spi, uart
+    RFID_IN_PN532_I2C_ADDRESS = int(os.getenv('RFID_IN_PN532_I2C_ADDRESS', '0x24'), 16)
+    RFID_IN_PN532_SPI_BUS = int(os.getenv('RFID_IN_PN532_SPI_BUS', '0'))
+    RFID_IN_PN532_SPI_DEVICE = int(os.getenv('RFID_IN_PN532_SPI_DEVICE', '0'))
+    RFID_IN_PN532_UART_PORT = os.getenv('RFID_IN_PN532_UART_PORT', '/dev/serial0')
+    RFID_IN_PN532_UART_BAUDRATE = int(os.getenv('RFID_IN_PN532_UART_BAUDRATE', '115200'))
+    
+    # PN532 Configuration per lettore OUT
+    RFID_OUT_PN532_INTERFACE = os.getenv('RFID_OUT_PN532_INTERFACE', 'i2c')
+    RFID_OUT_PN532_I2C_ADDRESS = int(os.getenv('RFID_OUT_PN532_I2C_ADDRESS', '0x25'), 16)
+    RFID_OUT_PN532_SPI_BUS = int(os.getenv('RFID_OUT_PN532_SPI_BUS', '1'))
+    RFID_OUT_PN532_SPI_DEVICE = int(os.getenv('RFID_OUT_PN532_SPI_DEVICE', '0'))
+    RFID_OUT_PN532_UART_PORT = os.getenv('RFID_OUT_PN532_UART_PORT', '/dev/serial1')
+    RFID_OUT_PN532_UART_BAUDRATE = int(os.getenv('RFID_OUT_PN532_UART_BAUDRATE', '115200'))
+    
     # Configurazione formato UID
     UID_FORMAT_MODE = os.getenv('UID_FORMAT_MODE', 'remove_suffix')
     UID_CHARS_COUNT = int(os.getenv('UID_CHARS_COUNT', 2))

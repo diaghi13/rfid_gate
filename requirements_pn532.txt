@@ -1,0 +1,14 @@
+# Dipendenze aggiuntive per supporto PN532
+# Installa con: pip install -r requirements_pn532.txt
+
+# Librerie Adafruit per PN532 (raccomandato)
+adafruit-circuitpython-pn532>=3.4.0
+adafruit-blinka>=8.20.0
+adafruit-circuitpython-busdevice>=5.2.0
+
+# Librerie CircuitPython per GPIO
+adafruit-circuitpython-typing>=1.8.0
+
+# Dipendenze per diverse interfacce
+pyserial>=3.5  # Per UART
+spidev>=3.6    # Per SPI (opzionale)
