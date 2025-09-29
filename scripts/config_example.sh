@@ -29,6 +29,7 @@ ENABLE_OUT_READER=False    # Abilita lettore uscita (solo se BIDIRECTIONAL_MODE=
 # ===========================================
 # 📱 CONFIGURAZIONE RFID READER INGRESSO
 # ===========================================
+RFID_IN_READER_TYPE=pn532
 RFID_IN_RST_PIN=22        # Pin RST del lettore RFID ingresso
 RFID_IN_SDA_PIN=8         # Pin SDA/SS del lettore RFID ingresso
 RFID_IN_ENABLE=True       # Abilita lettore RFID ingresso
@@ -37,6 +38,7 @@ RFID_IN_ENABLE=True       # Abilita lettore RFID ingresso
 # 📱 CONFIGURAZIONE RFID READER USCITA
 # ===========================================
 # (Solo se BIDIRECTIONAL_MODE=True e ENABLE_OUT_READER=True)
+RFID_OUT_READER_TYPE=pn532
 RFID_OUT_RST_PIN=25       # Pin RST del lettore RFID uscita
 RFID_OUT_SDA_PIN=7        # Pin SDA/SS del lettore RFID uscita
 RFID_OUT_ENABLE=False     # Abilita lettore RFID uscita

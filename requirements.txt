@@ -1,7 +1,7 @@
 # RFID Access Control System Dependencies
 # Versione ottimizzata per Raspberry Pi
 
-# Core RFID Support - Versione compatibile
+# Core RFID Support - MFRC522 (esistente)
 mfrc522==0.0.7
 
 # Alternativa più stabile (se la precedente da problemi)
@@ -11,8 +11,32 @@ mfrc522==0.0.7
 # GPIO Control (Raspberry Pi)
 RPi.GPIO==0.7.1
 
+# PN532 RFID Support - Nuove dipendenze per Waveshare PN532
+adafruit-circuitpython-pn532>=3.4.0
+adafruit-blinka>=8.20.0
+adafruit-circuitpython-busdevice>=5.2.0
+adafruit-circuitpython-typing>=1.8.0
+
+# Dipendenze per interfacce PN532
+pyserial>=3.5  # Per UART
+# spidev>=3.6  # Per SPI (opzionale, decommentare se necessario)
+
 # MQTT Communication
 paho-mqtt==1.6.1
 
 # Configuration Management
 python-dotenv==1.0.0
+
+# ==================================================
+# ISTRUZIONI INSTALLAZIONE
+# ==================================================
+# 
+# Per MFRC522 (default):
+#   pip install -r requirements.txt
+#
+# Per PN532 (nuovo supporto):
+#   pip install -r requirements.txt
+#   Poi configura .env: RFID_IN_READER_TYPE=pn532
+#
+# Switch automatico: cambia solo .env e riavvia!
+# ==================================================
