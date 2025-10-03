@@ -205,58 +205,73 @@ class PN532Reader(BaseRFIDReader):
         print("   - Dispositivo visibile: sudo i2cdetect -y 1")
     
     def read_card(self):
-        """Legge una carta RFID/NFC con gestione errori compatibile."""
+        """Legge una carta RFID/NFC - COMPATIBILE CON SISTEMA ESISTENTE."""
         if not self.is_initialized:
-            print(f"❌ PN532 {self.reader_id} non inizializzato")
-            return None
+            return None, None  # Restituisce tupla per compatibilità
         
         try:
             # Legge UID della carta con timeout breve per performance
             uid = self.pn532.read_passive_target(timeout=0.1)
             
             if uid is None:
-                return None
+                return None, None  # Nessuna carta rilevata
             
-            # Converte UID in formato compatibile con la classe base
+            # Converte UID in formato numerico per compatibilità
             if isinstance(uid, (bytes, bytearray)):
-                # Converte bytes in lista di hex strings per compatibilità
-                uid_hex_list = [f"0x{b:02x}" for b in uid]
-                # Anche calcola come intero per il debounce
+                # Converte bytes in intero
                 card_id = int.from_bytes(uid, byteorder='big')
+                # Crea anche rappresentazione hex pulita
+                uid_hex = ''.join([f'{b:02X}' for b in uid])
             else:
                 # Se è già una lista o altro formato
-                uid_hex_list = [hex(byte) if isinstance(byte, int) else str(byte) for byte in uid]
                 card_id = uid if isinstance(uid, int) else hash(str(uid))
+                uid_hex = str(uid)
             
             # Applica debounce usando card_id numerico
             if not self.apply_debounce(card_id):
-                return None  # Ignora per debounce
+                return None, None  # Ignora per debounce
             
-            # Formatta UID come stringa esadecimale usando il metodo della classe base
-            uid_str = self.format_card_uid(uid_hex_list)
+            # Formatta UID secondo configurazione di sistema
+            try:
+                from config import Config
+                
+                # Usa l'UID hex per la formattazione
+                if Config.UID_FORMAT_MODE == 'remove_suffix' and len(uid_hex) > Config.UID_CHARS_COUNT:
+                    formatted_uid = uid_hex[:-Config.UID_CHARS_COUNT]
+                elif Config.UID_FORMAT_MODE == 'truncate':
+                    formatted_uid = uid_hex[:Config.UID_TARGET_LENGTH]
+                elif Config.UID_FORMAT_MODE == 'take_last':
+                    formatted_uid = uid_hex[-Config.UID_TARGET_LENGTH:]
+                elif Config.UID_FORMAT_MODE == 'fixed_length':
+                    if len(uid_hex) > Config.UID_TARGET_LENGTH:
+                        formatted_uid = uid_hex[:Config.UID_TARGET_LENGTH]
+                    else:
+                        formatted_uid = uid_hex.zfill(Config.UID_TARGET_LENGTH)
+                else:
+                    formatted_uid = uid_hex.zfill(8)
+                
+                # Debug se abilitato
+                if hasattr(Config, 'UID_DEBUG_MODE') and Config.UID_DEBUG_MODE:
+                    print(f"🔧 PN532 UID: raw={uid_hex}, formatted={formatted_uid}, mode={Config.UID_FORMAT_MODE}")
+                
+            except Exception as e:
+                print(f"⚠️ Errore formattazione UID: {e}")
+                formatted_uid = uid_hex.zfill(8)
             
-            # Prepara informazioni carta - fix per compatibilità con get_card_info
-            card_info = {
-                'uid': uid_str,
-                'raw_id': card_id,
-                'uid_formatted': uid_str,
-                'uid_hex': f"0x{card_id:X}" if isinstance(card_id, int) else str(card_id),
-                'data': None,  # PN532 non legge automaticamente dati NDEF
-                'data_length': 0,
-                'type': f"PN532-{len(uid)}byte",
-                'reader_id': self.reader_id,
-                'reader_type': 'PN532'
-            }
+            # Prepara card_data vuoto (PN532 non legge automaticamente dati NDEF)
+            card_data = ""
             
-            print(f"📇 {self.reader_id} - Carta: {card_info['uid']} ({card_info['type']})")
-            return card_info
+            print(f"📇 {self.reader_id} - Carta: {formatted_uid} (PN532-{len(uid)}byte)")
+            
+            # Restituisce tupla compatibile con sistema esistente
+            return card_id, card_data
             
         except Exception as e:
             # Non stampiamo errore per timeout normale
             error_msg = str(e).lower()
             if not any(x in error_msg for x in ['timeout', 'no card', 'did not receive', 'ack']):
                 print(f"❌ Errore lettura PN532: {e}")
-            return None
+            return None, None  # Sempre restituire tupla
     
     def test_connection(self):
         """Test connessione PN532 - IMPLEMENTAZIONE RICHIESTA."""
