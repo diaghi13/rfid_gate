@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PN532 RFID Reader Implementation - Versione Compatibile
-Supporta interfacce I2C, SPI e UART con gestione errori robusta.
+PN532 RFID Reader Implementation
+Supporta interfacce I2C, SPI e UART con gestione errori avanzata.
 """
 
 import time
@@ -9,7 +9,7 @@ from .base_reader import BaseRFIDReader
 
 
 class PN532Reader(BaseRFIDReader):
-    """Implementazione del lettore PN532 per NFC/RFID - Versione compatibile."""
+    """Implementazione del lettore PN532 per NFC/RFID."""
     
     def __init__(self, reader_id="PN532", interface="i2c", **kwargs):
         super().__init__(reader_id)
@@ -25,13 +25,13 @@ class PN532Reader(BaseRFIDReader):
         self.spi_device = kwargs.get('spi_device', 0)
         
         # Configurazioni UART
-        self.uart_port = kwargs.get('uart_port', '/dev/serial0')
+        self.uart_port = kwargs.get('uart_port', '/dev/ttyAMA0')
         self.uart_baudrate = kwargs.get('uart_baudrate', 115200)
         
         print(f"📡 PN532Reader {reader_id} creato - Interface: {self.interface.upper()}")
     
     def initialize(self):
-        """Inizializza il lettore PN532 con gestione errori robusta."""
+        """Inizializza il lettore PN532 con gestione avanzata degli errori e retry."""
         if self.is_initialized:
             return True
         
@@ -153,27 +153,31 @@ class PN532Reader(BaseRFIDReader):
         """Configura PN532 con retry robusto per SAM e firmware."""
         print("🔧 Configurazione PN532...")
         
-        # Configurazione SAM (opzionale - non blocca se fallisce)
-        try:
-            self.pn532.SAM_configuration()
-            print("✅ SAM configurato")
-        except Exception as e:
-            print(f"⚠️ SAM configurazione fallita: {e}")
-            print("   (Continuando senza SAM - normale per alcuni moduli)")
+        # Retry della configurazione SAM fino a 3 volte
+        for attempt in range(3):
+            try:
+                self.pn532.SAM_configuration()
+                print(f"✅ SAM configurato al tentativo {attempt + 1}")
+                break
+            except Exception as e:
+                print(f"⚠️ Tentativo {attempt + 1} SAM fallito: {e}")
+                if attempt == 2:
+                    raise
+                time.sleep(0.5)
         
-        # Verifica versione firmware con retry
+        # Verifica versione firmware con timeout esteso
         print("🔍 Verifica firmware...")
         for attempt in range(3):
             try:
-                fw_info = self.pn532.firmware_version
-                if fw_info and len(fw_info) >= 4:
-                    ic, ver, rev, support = fw_info
-                    print(f"✅ PN532 {self.reader_id} connesso - FW: v{ver}.{rev} (IC: 0x{ic:02X})")
-                else:
-                    print(f"✅ PN532 {self.reader_id} connesso (info firmware limitata)")
+                ic, ver, rev, support = self.pn532.firmware_version
+                print(f"✅ PN532 {self.reader_id} connesso - FW: v{ver}.{rev} (IC: 0x{ic:02X})")
                 
-                # Configurazioni opzionali compatibili
-                self._apply_optional_configs()
+                # Configurazione ottimale per lettura rapida
+                try:
+                    self.pn532.set_passive_activation_retries(0xFF)
+                    print("🔧 Retry infiniti configurati")
+                except:
+                    print("⚠️ set_passive_activation_retries non supportato")
                 
                 self.is_initialized = True
                 return True
@@ -187,15 +191,6 @@ class PN532Reader(BaseRFIDReader):
         
         return False
     
-    def _apply_optional_configs(self):
-        """Applica configurazioni opzionali se disponibili - NON usa metodi deprecati."""
-        try:
-            # RIMOSSO: set_passive_activation_retries - non disponibile in tutte le versioni
-            # Non applichiamo configurazioni che potrebbero causare errori
-            print("🔧 Configurazioni base applicate")
-        except Exception as e:
-            print(f"⚠️ Configurazioni opzionali fallite: {e}")
-    
     def _print_hardware_checklist(self):
         """Stampa checklist per verifica hardware."""
         print("🔧 Verificare:")
@@ -205,28 +200,20 @@ class PN532Reader(BaseRFIDReader):
         print("   - Dispositivo visibile: sudo i2cdetect -y 1")
     
     def read_card(self):
-        """Legge una carta RFID/NFC con gestione errori compatibile."""
+        """Legge una carta RFID/NFC."""
         if not self.is_initialized:
             print(f"❌ PN532 {self.reader_id} non inizializzato")
             return None
         
         try:
             # Legge UID della carta con timeout breve per performance
-            uid = self.pn532.read_passive_target(timeout=0.1)
+            uid = self.pn532.read_passive_target(timeout=0.5)
             
             if uid is None:
                 return None
             
-            # Converte UID in formato compatibile
-            if isinstance(uid, (bytes, bytearray)):
-                # Formatta come lista di hex per compatibilità
-                uid_hex_list = [f"0x{b:02x}" for b in uid]
-            else:
-                # Se è già una lista
-                uid_hex_list = [hex(byte) if isinstance(byte, int) else str(byte) for byte in uid]
-            
             # Formatta UID come stringa esadecimale
-            uid_str = self.format_card_uid(uid_hex_list)
+            uid_str = self.format_card_uid([hex(byte) for byte in uid])
             
             # Applica debounce se configurato
             current_time = time.time()
@@ -240,10 +227,7 @@ class PN532Reader(BaseRFIDReader):
             return card_info
             
         except Exception as e:
-            # Non stampiamo errore per timeout normale
-            error_msg = str(e).lower()
-            if not any(x in error_msg for x in ['timeout', 'no card', 'did not receive', 'ack']):
-                print(f"❌ Errore lettura PN532: {e}")
+            print(f"❌ Errore lettura PN532: {e}")
             return None
     
     def cleanup(self):
@@ -270,27 +254,16 @@ class PN532Reader(BaseRFIDReader):
             }
         
         try:
-            fw_info = self.pn532.firmware_version
-            if fw_info and len(fw_info) >= 4:
-                ic, ver, rev, support = fw_info
-                return {
-                    'reader_id': self.reader_id,
-                    'type': 'PN532',
-                    'interface': self.interface,
-                    'status': 'connected',
-                    'firmware': f"v{ver}.{rev}",
-                    'ic': f"0x{ic:02X}",
-                    'address': f"0x{self.i2c_address:02X}" if self.interface == "i2c" else "N/A"
-                }
-            else:
-                return {
-                    'reader_id': self.reader_id,
-                    'type': 'PN532',
-                    'interface': self.interface,
-                    'status': 'connected',
-                    'firmware': 'detected',
-                    'address': f"0x{self.i2c_address:02X}" if self.interface == "i2c" else "N/A"
-                }
+            ic, ver, rev, support = self.pn532.firmware_version
+            return {
+                'reader_id': self.reader_id,
+                'type': 'PN532',
+                'interface': self.interface,
+                'status': 'connected',
+                'firmware': f"v{ver}.{rev}",
+                'ic': f"0x{ic:02X}",
+                'address': f"0x{self.i2c_address:02X}" if self.interface == "i2c" else "N/A"
+            }
         except:
             return {
                 'reader_id': self.reader_id,
