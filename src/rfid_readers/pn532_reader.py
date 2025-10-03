@@ -217,24 +217,36 @@ class PN532Reader(BaseRFIDReader):
             if uid is None:
                 return None
             
-            # Converte UID in formato compatibile
+            # Converte UID in formato compatibile con la classe base
             if isinstance(uid, (bytes, bytearray)):
-                # Formatta come lista di hex per compatibilità
+                # Converte bytes in lista di hex strings per compatibilità
                 uid_hex_list = [f"0x{b:02x}" for b in uid]
+                # Anche calcola come intero per il debounce
+                card_id = int.from_bytes(uid, byteorder='big')
             else:
-                # Se è già una lista
+                # Se è già una lista o altro formato
                 uid_hex_list = [hex(byte) if isinstance(byte, int) else str(byte) for byte in uid]
+                card_id = uid if isinstance(uid, int) else hash(str(uid))
             
-            # Formatta UID come stringa esadecimale
+            # Applica debounce usando card_id numerico
+            if not self.apply_debounce(card_id):
+                return None  # Ignora per debounce
+            
+            # Formatta UID come stringa esadecimale usando il metodo della classe base
             uid_str = self.format_card_uid(uid_hex_list)
             
-            # Applica debounce se configurato
-            current_time = time.time()
-            if self.apply_debounce(uid_str, current_time):
-                return None
-            
-            # Prepara informazioni carta
-            card_info = self.get_card_info(uid_str, len(uid))
+            # Prepara informazioni carta - fix per compatibilità con get_card_info
+            card_info = {
+                'uid': uid_str,
+                'raw_id': card_id,
+                'uid_formatted': uid_str,
+                'uid_hex': f"0x{card_id:X}" if isinstance(card_id, int) else str(card_id),
+                'data': None,  # PN532 non legge automaticamente dati NDEF
+                'data_length': 0,
+                'type': f"PN532-{len(uid)}byte",
+                'reader_id': self.reader_id,
+                'reader_type': 'PN532'
+            }
             
             print(f"📇 {self.reader_id} - Carta: {card_info['uid']} ({card_info['type']})")
             return card_info
@@ -245,6 +257,26 @@ class PN532Reader(BaseRFIDReader):
             if not any(x in error_msg for x in ['timeout', 'no card', 'did not receive', 'ack']):
                 print(f"❌ Errore lettura PN532: {e}")
             return None
+    
+    def test_connection(self):
+        """Test connessione PN532 - IMPLEMENTAZIONE RICHIESTA."""
+        if not self.is_initialized or not self.pn532:
+            print(f"⚠️ PN532 {self.reader_id} non inizializzato")
+            return False
+        
+        try:
+            # Test semplice: prova a leggere versione firmware
+            fw_info = self.pn532.firmware_version
+            if fw_info:
+                print(f"✅ Test connessione PN532 {self.reader_id} OK")
+                return True
+            else:
+                print(f"❌ Test connessione PN532 {self.reader_id} fallito - no firmware info")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Test connessione PN532 {self.reader_id} fallito: {e}")
+            return False
     
     def cleanup(self):
         """Pulizia risorse PN532."""
