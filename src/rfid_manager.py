@@ -6,6 +6,9 @@ RFID Manager - Gestione dual readers con anti-crosstalk
 import threading
 import time
 from queue import Queue, Empty
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import Config
 from rfid_readers.reader_factory import RFIDReaderFactory
 
@@ -133,6 +136,10 @@ class RFIDManager:
             
             return True
     
+    def start_reading(self):
+        """Alias per start() - compatibilità con main.py."""
+        return self.start()
+    
     def start(self):
         """Avvia threads di lettura per ogni lettore."""
         if not self.is_initialized:
@@ -194,6 +201,18 @@ class RFIDManager:
             return self.card_queue.get(timeout=timeout)
         except Empty:
             return None
+    
+    def wait_for_card(self, timeout=1.0):
+        """Attende una card - alias per get_next_card con timeout maggiore."""
+        return self.get_next_card(timeout=timeout)
+    
+    def get_active_readers(self):
+        """Restituisce lista dei lettori attivi."""
+        return list(self.readers.keys())
+    
+    def stop_reading(self):
+        """Alias per stop() - compatibilità con main.py."""
+        self.stop()
     
     def stop(self):
         """Ferma il manager."""
