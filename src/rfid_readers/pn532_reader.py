@@ -195,90 +195,23 @@ class PN532Reader(BaseRFIDReader):
     
     def read_card(self):
         """
-        Lettura card ROBUSTA - Design anti-blocco.
+        Legge la carta RFID/NFC - versione semplificata
+        Returns: tuple (uid, card_type) o (None, None) se nessuna carta
         """
-        if not self.is_initialized:
-            # Debug: perché non è inizializzato
-            if hasattr(self, '_debug_not_init'):
-                if not self._debug_not_init:
-                    print(f"🐛 {self.reader_id}: Lettore non inizializzato")
-                    self._debug_not_init = True
-            else:
-                print(f"🐛 {self.reader_id}: Lettore non inizializzato")
-                self._debug_not_init = True
-            return None, None
-            
-        if not self.pn532:
-            # Debug: perché pn532 è None
-            if hasattr(self, '_debug_no_pn532'):
-                if not self._debug_no_pn532:
-                    print(f"🐛 {self.reader_id}: Oggetto PN532 è None (librerie mancanti?)")
-                    self._debug_no_pn532 = True
-            else:
-                print(f"🐛 {self.reader_id}: Oggetto PN532 è None (librerie mancanti?)")
-                self._debug_no_pn532 = True
-            return None, None
-        
-        current_time = time.time()
-        
-        # Rate limiting: max 1 lettura ogni 100ms
-        if (current_time - self.last_successful_read) < 0.1:
+        if not self.is_initialized or not self.pn532:
             return None, None
         
         try:
-            # ⚡ TIMEOUT BREVISSIMO - chiave del successo!
-            # 0.01s = 10ms - troppo breve per creare blocchi
             uid = self.pn532.read_passive_target(timeout=0.01)
-            
-            if uid is not None:
-                # Reset errori consecutivi
-                self.consecutive_errors = 0
-                self.last_successful_read = current_time
+            if uid:
+                uid_hex = ''.join([f'{i:02x}' for i in uid])
+                return uid_hex, 'mifare'
                 
-                # Converti UID
-                if isinstance(uid, (bytes, bytearray)):
-                    card_id = int.from_bytes(uid, byteorder='big')
-                else:
-                    card_id = uid
-                
-                # Applica debounce
-                if not self.apply_debounce(card_id):
-                    return None, None
-                
-                # Formatazione UID per compatibilità
-                formatted_uid = self.format_card_uid(str(card_id))
-                
-                card_data = {
-                    'uid': formatted_uid,
-                    'timestamp': current_time,
-                    'reader_interface': self.interface,
-                    'reader_id': self.reader_id
-                }
-                
-                return formatted_uid, card_data
-            
-            return None, None
-            
         except Exception as e:
-            error_msg = str(e).lower()
-            
-            # Ignora errori normali (timeout, no card)
-            if any(x in error_msg for x in ['timeout', 'no card found']):
-                return None, None
-            
-            # Gestisci errori gravi (checksum, response length)
-            if any(x in error_msg for x in ['checksum', 'response length', 'ack']):
-                self.consecutive_errors += 1
+            # Log solo per debug, non bloccare
+            pass
                 
-                if self.consecutive_errors >= self.max_consecutive_errors:
-                    print(f"⚠️ PN532 {self.reader_id}: {self.consecutive_errors} errori, soft reset...")
-                    self._soft_reset()
-                    self.consecutive_errors = 0
-                    
-                    # Pausa breve dopo reset
-                    time.sleep(0.1)
-            
-            return None, None
+        return None, None
     
     def _soft_reset(self):
         """

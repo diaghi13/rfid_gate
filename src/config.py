@@ -157,6 +157,13 @@ class Config:
     UID_TARGET_LENGTH = int(os.getenv('UID_TARGET_LENGTH', 8))
     UID_DEBUG_MODE = os.getenv('UID_DEBUG_MODE', 'True').lower() == 'true'
     
+    # Alias per compatibilità con test
+    PN532_IN_I2C_ADDRESS = RFID_IN_PN532_I2C_ADDRESS
+    PN532_OUT_SPI_BUS = RFID_OUT_PN532_SPI_BUS
+    PN532_OUT_SPI_DEVICE = RFID_OUT_PN532_SPI_DEVICE
+    MFRC522_IN_RST_PIN = RFID_IN_RST_PIN
+    MFRC522_OUT_RST_PIN = RFID_OUT_RST_PIN
+    
     @classmethod
     def get_mqtt_topic(cls, action="badge"):
         return f"gate/{cls.TORNELLO_ID}/{action}"
