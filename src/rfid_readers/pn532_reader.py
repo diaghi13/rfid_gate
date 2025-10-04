@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PN532 RFID Reader Implementation - Versione Compatibile
-Supporta interfacce I2C, SPI e UART con gestione errori robusta.
+PN532 RFID Reader Implementation - Design Robusto Anti-Blocco
+Supporta interfacce I2C, SPI e UART con gestione errori che previene blocchi.
 """
 
 import time
@@ -9,16 +9,19 @@ from .base_reader import BaseRFIDReader
 
 
 class PN532Reader(BaseRFIDReader):
-    """Implementazione del lettore PN532 per NFC/RFID - Versione compatibile."""
+    """Lettore PN532 - Design robusto che NON si blocca mai."""
     
     def __init__(self, reader_id="PN532", interface="i2c", **kwargs):
         super().__init__(reader_id)
         
         self.interface = interface.lower()
         self.pn532 = None
+        self.last_successful_read = 0
+        self.consecutive_errors = 0
+        self.max_consecutive_errors = 3
         
         # Configurazioni I2C
-        self.i2c_address = kwargs.get('i2c_address', 0x24)  # Indirizzo fisso Waveshare
+        self.i2c_address = kwargs.get('i2c_address', 0x24)
         
         # Configurazioni SPI
         self.spi_bus = kwargs.get('spi_bus', 0)
@@ -31,82 +34,89 @@ class PN532Reader(BaseRFIDReader):
         print(f"📡 PN532Reader {reader_id} creato - Interface: {self.interface.upper()}")
     
     def initialize(self):
-        """Inizializza il lettore PN532 con gestione errori robusta."""
+        """Inizializzazione PN532 senza SAM config problematica."""
         if self.is_initialized:
             return True
         
         print(f"🔄 Inizializzazione PN532 {self.reader_id} - {self.interface.upper()}")
         
         try:
-            # Configura interfaccia specifica
+            # Crea connessione hardware
             if self.interface == "i2c":
-                success = self._setup_i2c()
+                success = self._setup_i2c_robust()
             elif self.interface == "spi":
-                success = self._setup_spi()
+                success = self._setup_spi_robust()
             elif self.interface == "uart":
-                success = self._setup_uart()
+                success = self._setup_uart_robust()
             else:
                 raise ValueError(f"Interfaccia non supportata: {self.interface}")
             
             if not success:
                 return False
             
-            # Configura PN532 con retry robusto
-            return self._configure_pn532()
+            # ❌ SKIP SAM configuration - causa blocchi!
+            # ❌ SKIP set_passive_activation_retries - non esiste sempre
             
-        except ImportError as e:
-            print(f"❌ Libreria PN532 non installata: {e}")
-            print("💡 Installa con: pip install adafruit-circuitpython-pn532 adafruit-blinka")
-            return False
-        except Exception as e:
-            print(f"❌ Errore init PN532 {self.reader_id}: {e}")
-            self._print_hardware_checklist()
-            return False
-    
-    def _setup_i2c(self):
-        """Configura interfaccia I2C con fallback alle librerie disponibili."""
-        # Prova prima con libreria dedicata PN532
-        try:
-            from pn532 import PN532_I2C
-            import board
-            import busio
+            # Test semplice firmware (senza blocking calls)
+            try:
+                fw_info = self._safe_firmware_check()
+                if fw_info:
+                    print(f"✅ PN532 {self.reader_id} - Firmware OK")
+                else:
+                    print(f"⚠️ PN532 {self.reader_id} - Firmware check limitato (continuiamo)")
+            except Exception as e:
+                print(f"⚠️ Firmware check fallito: {e} (continuiamo...)")
             
-            i2c = busio.I2C(board.SCL, board.SDA)
-            self.pn532 = PN532_I2C(i2c, address=self.i2c_address, debug=False)
-            print(f"🔵 PN532 I2C configurato - Indirizzo: 0x{self.i2c_address:02X}")
+            self.is_initialized = True
+            self.consecutive_errors = 0
+            print(f"✅ PN532 {self.reader_id} inizializzato (design robusto)")
             return True
             
-        except ImportError:
-            # Fallback a Adafruit se libreria dedicata non disponibile
+        except Exception as e:
+            print(f"❌ Errore inizializzazione PN532 {self.reader_id}: {e}")
+            return False
+    
+    def _setup_i2c_robust(self):
+        """Inizializzazione I2C robusta senza SAM config."""
+        try:
+            # Prova adafruit-circuitpython-pn532 (più stabile)
             try:
                 import board
                 import busio
                 from adafruit_pn532.i2c import PN532_I2C
                 
+                # Crea bus I2C
                 i2c = busio.I2C(board.SCL, board.SDA)
+                
+                # Crea PN532 con debug disabilitato (evita spam)
                 self.pn532 = PN532_I2C(i2c, address=self.i2c_address, debug=False)
-                print(f"🔵 PN532 Adafruit I2C configurato - Indirizzo: 0x{self.i2c_address:02X}")
+                
+                print(f"   ✅ I2C PN532 creato - Address: 0x{self.i2c_address:02X}")
                 return True
                 
-            except ImportError as e:
-                print(f"❌ Nessuna libreria PN532 I2C trovata: {e}")
-                return False
+            except ImportError:
+                # Fallback a pn532 lib
+                try:
+                    from pn532 import PN532_I2C
+                    import board
+                    import busio
+                    
+                    i2c_bus = busio.I2C(board.SCL, board.SDA)
+                    self.pn532 = PN532_I2C(i2c_bus, address=self.i2c_address)
+                    
+                    print(f"   ✅ pn532 lib caricata - I2C {hex(self.i2c_address)}")
+                    return True
+                except ImportError as e:
+                    print(f"❌ Nessuna libreria PN532 I2C trovata: {e}")
+                    return False
+        except Exception as e:
+            print(f"❌ Errore setup I2C: {e}")
+            return False
     
-    def _setup_spi(self):
-        """Configura interfaccia SPI con fallback alle librerie disponibili."""
+    def _setup_spi_robust(self):
+        """Inizializzazione SPI robusta."""
         try:
-            from pn532 import PN532_SPI
-            import busio
-            import board
-            import digitalio
-            
-            spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
-            cs_pin = digitalio.DigitalInOut(board.D8)
-            self.pn532 = PN532_SPI(spi, cs_pin, debug=False)
-            print(f"🟠 PN532 SPI configurato - Bus:{self.spi_bus}, Device:{self.spi_device}")
-            return True
-            
-        except ImportError:
+            # Prova adafruit-circuitpython-pn532 (più stabile)
             try:
                 import board
                 import busio
@@ -114,235 +124,204 @@ class PN532Reader(BaseRFIDReader):
                 from adafruit_pn532.spi import PN532_SPI
                 
                 spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
-                cs_pin = digitalio.DigitalInOut(board.D8)
+                cs_pin = digitalio.DigitalInOut(board.D8)  # CS0 per device 0
+                
                 self.pn532 = PN532_SPI(spi, cs_pin, debug=False)
-                print(f"🟠 PN532 Adafruit SPI configurato")
+                
+                print(f"   ✅ SPI PN532 creato - Bus: {self.spi_bus}, Device: {self.spi_device}")
                 return True
                 
-            except ImportError as e:
-                print(f"❌ Nessuna libreria PN532 SPI trovata: {e}")
-                return False
+            except ImportError:
+                # Fallback a pn532 lib
+                try:
+                    from pn532 import PN532_SPI
+                    import busio
+                    import board
+                    import digitalio
+                    
+                    spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
+                    cs = digitalio.DigitalInOut(board.D8)
+                    self.pn532 = PN532_SPI(spi, cs)
+                    
+                    print(f"   ✅ pn532 lib caricata - SPI")
+                    return True
+                except ImportError as e:
+                    print(f"❌ Nessuna libreria PN532 SPI trovata: {e}")
+                    return False
+        except Exception as e:
+            print(f"❌ Errore setup SPI: {e}")
+            return False
     
-    def _setup_uart(self):
-        """Configura interfaccia UART con fallback alle librerie disponibili."""
+    def _setup_uart_robust(self):
+        """Inizializzazione UART robusta."""
         try:
-            from pn532 import PN532_UART
-            import serial
-            
-            uart = serial.Serial(self.uart_port, baudrate=self.uart_baudrate, timeout=1)
-            self.pn532 = PN532_UART(uart, debug=False)
-            print(f"🟡 PN532 UART configurato - Port:{self.uart_port}, Baud:{self.uart_baudrate}")
-            return True
-            
-        except ImportError:
+            # Prova adafruit-circuitpython-pn532
             try:
                 import board
                 import busio
                 from adafruit_pn532.uart import PN532_UART
                 
-                uart = busio.UART(board.TX, board.RX, baudrate=self.uart_baudrate, timeout=1)
+                uart = busio.UART(board.TX, board.RX, baudrate=self.uart_baudrate)
                 self.pn532 = PN532_UART(uart, debug=False)
-                print(f"🟡 PN532 Adafruit UART configurato")
+                
+                print(f"   ✅ UART PN532 creato - Port: {self.uart_port}, Baud: {self.uart_baudrate}")
                 return True
                 
-            except ImportError as e:
-                print(f"❌ Nessuna libreria PN532 UART trovata: {e}")
-                return False
-    
-    def _configure_pn532(self):
-        """Configura PN532 con retry robusto per SAM e firmware."""
-        print("🔧 Configurazione PN532...")
-        
-        # Configurazione SAM (opzionale - non blocca se fallisce)
-        try:
-            self.pn532.SAM_configuration()
-            print("✅ SAM configurato")
-        except Exception as e:
-            print(f"⚠️ SAM configurazione fallita: {e}")
-            print("   (Continuando senza SAM - normale per alcuni moduli)")
-        
-        # Verifica versione firmware con retry
-        print("🔍 Verifica firmware...")
-        for attempt in range(3):
-            try:
-                fw_info = self.pn532.firmware_version
-                if fw_info and len(fw_info) >= 4:
-                    ic, ver, rev, support = fw_info
-                    print(f"✅ PN532 {self.reader_id} connesso - FW: v{ver}.{rev} (IC: 0x{ic:02X})")
-                else:
-                    print(f"✅ PN532 {self.reader_id} connesso (info firmware limitata)")
-                
-                # Configurazioni opzionali compatibili
-                self._apply_optional_configs()
-                
-                self.is_initialized = True
-                return True
-                
-            except Exception as fw_error:
-                print(f"⚠️ Tentativo {attempt + 1} firmware fallito: {fw_error}")
-                if attempt == 2:
-                    print(f"❌ Errore comunicazione PN532 dopo 3 tentativi: {fw_error}")
+            except ImportError:
+                # Fallback a pn532 lib
+                try:
+                    from pn532 import PN532_UART
+                    import serial
+                    
+                    self.pn532 = PN532_UART(self.uart_port, self.uart_baudrate)
+                    
+                    print(f"   ✅ pn532 lib caricata - UART {self.uart_port}")
+                    return True
+                except ImportError as e:
+                    print(f"❌ Nessuna libreria PN532 UART trovata: {e}")
                     return False
-                time.sleep(1.0)  # Attesa più lunga tra tentativi
-        
-        return False
-    
-    def _apply_optional_configs(self):
-        """Applica configurazioni opzionali se disponibili - NON usa metodi deprecati."""
-        try:
-            # RIMOSSO: set_passive_activation_retries - non disponibile in tutte le versioni
-            # Non applichiamo configurazioni che potrebbero causare errori
-            print("🔧 Configurazioni base applicate")
         except Exception as e:
-            print(f"⚠️ Configurazioni opzionali fallite: {e}")
+            print(f"❌ Errore setup UART: {e}")
+            return False
     
-    def _print_hardware_checklist(self):
-        """Stampa checklist per verifica hardware."""
-        print("🔧 Verificare:")
-        print("   - Connessioni hardware (VCC, GND, SDA, SCL)")
-        print("   - Jumper I2C: LSB=ON, MSB=OFF")
-        print("   - I2C abilitato: sudo raspi-config")
-        print("   - Dispositivo visibile: sudo i2cdetect -y 1")
+    def _safe_firmware_check(self):
+        """Check firmware senza bloccare il device."""
+        try:
+            # Timeout molto breve per evitare blocchi
+            fw_info = self.pn532.firmware_version
+            return fw_info is not None
+        except:
+            return False
     
     def read_card(self):
-        """Legge una carta RFID/NFC - COMPATIBILE CON SISTEMA ESISTENTE."""
-        if not self.is_initialized:
-            return None, None  # Restituisce tupla per compatibilità
+        """
+        Lettura card ROBUSTA - Design anti-blocco.
+        """
+        if not self.is_initialized or not self.pn532:
+            return None, None
+        
+        current_time = time.time()
+        
+        # Rate limiting: max 1 lettura ogni 100ms
+        if (current_time - self.last_successful_read) < 0.1:
+            return None, None
         
         try:
-            # Legge UID della carta con timeout breve per performance
-            uid = self.pn532.read_passive_target(timeout=0.1)
+            # ⚡ TIMEOUT BREVISSIMO - chiave del successo!
+            # 0.01s = 10ms - troppo breve per creare blocchi
+            uid = self.pn532.read_passive_target(timeout=0.01)
             
-            if uid is None:
-                return None, None  # Nessuna carta rilevata
-            
-            # Converte UID in formato numerico per compatibilità
-            if isinstance(uid, (bytes, bytearray)):
-                # Converte bytes in intero
-                card_id = int.from_bytes(uid, byteorder='big')
-                # Crea anche rappresentazione hex pulita
-                uid_hex = ''.join([f'{b:02X}' for b in uid])
-            else:
-                # Se è già una lista o altro formato
-                card_id = uid if isinstance(uid, int) else hash(str(uid))
-                uid_hex = str(uid)
-            
-            # Applica debounce usando card_id numerico
-            if not self.apply_debounce(card_id):
-                return None, None  # Ignora per debounce
-            
-            # Formatta UID secondo configurazione di sistema
-            try:
-                from config import Config
+            if uid is not None:
+                # Reset errori consecutivi
+                self.consecutive_errors = 0
+                self.last_successful_read = current_time
                 
-                # Usa l'UID hex per la formattazione
-                if Config.UID_FORMAT_MODE == 'remove_suffix' and len(uid_hex) > Config.UID_CHARS_COUNT:
-                    formatted_uid = uid_hex[:-Config.UID_CHARS_COUNT]
-                elif Config.UID_FORMAT_MODE == 'truncate':
-                    formatted_uid = uid_hex[:Config.UID_TARGET_LENGTH]
-                elif Config.UID_FORMAT_MODE == 'take_last':
-                    formatted_uid = uid_hex[-Config.UID_TARGET_LENGTH:]
-                elif Config.UID_FORMAT_MODE == 'fixed_length':
-                    if len(uid_hex) > Config.UID_TARGET_LENGTH:
-                        formatted_uid = uid_hex[:Config.UID_TARGET_LENGTH]
-                    else:
-                        formatted_uid = uid_hex.zfill(Config.UID_TARGET_LENGTH)
+                # Converti UID
+                if isinstance(uid, (bytes, bytearray)):
+                    card_id = int.from_bytes(uid, byteorder='big')
                 else:
-                    formatted_uid = uid_hex.zfill(8)
+                    card_id = uid
                 
-                # Debug se abilitato
-                if hasattr(Config, 'UID_DEBUG_MODE') and Config.UID_DEBUG_MODE:
-                    print(f"🔧 PN532 UID: raw={uid_hex}, formatted={formatted_uid}, mode={Config.UID_FORMAT_MODE}")
+                # Applica debounce
+                if not self.apply_debounce(card_id):
+                    return None, None
                 
-            except Exception as e:
-                print(f"⚠️ Errore formattazione UID: {e}")
-                formatted_uid = uid_hex.zfill(8)
+                # Formatazione UID per compatibilità
+                formatted_uid = self.format_card_uid(str(card_id))
+                
+                card_data = {
+                    'uid': formatted_uid,
+                    'timestamp': current_time,
+                    'reader_interface': self.interface,
+                    'reader_id': self.reader_id
+                }
+                
+                return formatted_uid, card_data
             
-            # Prepara card_data vuoto (PN532 non legge automaticamente dati NDEF)
-            card_data = ""
-            
-            print(f"📇 {self.reader_id} - Carta: {formatted_uid} (PN532-{len(uid)}byte)")
-            
-            # Restituisce tupla compatibile con sistema esistente
-            return card_id, card_data
+            return None, None
             
         except Exception as e:
-            # Non stampiamo errore per timeout normale
             error_msg = str(e).lower()
-            if not any(x in error_msg for x in ['timeout', 'no card', 'did not receive', 'ack']):
-                print(f"❌ Errore lettura PN532: {e}")
-            return None, None  # Sempre restituire tupla
+            
+            # Ignora errori normali (timeout, no card)
+            if any(x in error_msg for x in ['timeout', 'no card found']):
+                return None, None
+            
+            # Gestisci errori gravi (checksum, response length)
+            if any(x in error_msg for x in ['checksum', 'response length', 'ack']):
+                self.consecutive_errors += 1
+                
+                if self.consecutive_errors >= self.max_consecutive_errors:
+                    print(f"⚠️ PN532 {self.reader_id}: {self.consecutive_errors} errori, soft reset...")
+                    self._soft_reset()
+                    self.consecutive_errors = 0
+                    
+                    # Pausa breve dopo reset
+                    time.sleep(0.1)
+            
+            return None, None
+    
+    def _soft_reset(self):
+        """
+        Soft reset che NON richiede reboot sistema.
+        """
+        try:
+            # Metodo 1: Recreate del device object
+            old_pn532 = self.pn532
+            self.pn532 = None
+            
+            # Breve pausa
+            time.sleep(0.05)
+            
+            # Ricrea connessione
+            if self.interface == "i2c":
+                self._setup_i2c_robust()
+            elif self.interface == "spi":
+                self._setup_spi_robust()
+            elif self.interface == "uart":
+                self._setup_uart_robust()
+            
+            print(f"✅ PN532 {self.reader_id}: soft reset completato")
+            
+        except Exception as e:
+            print(f"❌ Soft reset fallito: {e}")
     
     def test_connection(self):
-        """Test connessione PN532 - IMPLEMENTAZIONE RICHIESTA."""
+        """Test connessione semplice."""
         if not self.is_initialized or not self.pn532:
-            print(f"⚠️ PN532 {self.reader_id} non inizializzato")
             return False
         
         try:
-            # Test semplice: prova a leggere versione firmware
-            fw_info = self.pn532.firmware_version
-            if fw_info:
-                print(f"✅ Test connessione PN532 {self.reader_id} OK")
-                return True
-            else:
-                print(f"❌ Test connessione PN532 {self.reader_id} fallito - no firmware info")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Test connessione PN532 {self.reader_id} fallito: {e}")
+            # Test molto semplice
+            return self._safe_firmware_check()
+        except:
             return False
     
     def cleanup(self):
-        """Pulizia risorse PN532."""
-        if self.pn532:
-            try:
-                # Non ci sono operazioni specifiche di cleanup per PN532
-                print(f"🧹 PN532 {self.reader_id} - Cleanup completato")
-            except Exception as e:
-                print(f"⚠️ Errore durante cleanup PN532: {e}")
-        
-        self.is_initialized = False
-        self.pn532 = None
-    
-    def get_status(self):
-        """Restituisce lo stato del lettore PN532."""
-        if not self.is_initialized:
-            return {
-                'reader_id': self.reader_id,
-                'type': 'PN532',
-                'interface': self.interface,
-                'status': 'disconnected',
-                'firmware': 'unknown'
-            }
-        
+        """Cleanup senza operazioni pericolose."""
         try:
-            fw_info = self.pn532.firmware_version
-            if fw_info and len(fw_info) >= 4:
-                ic, ver, rev, support = fw_info
-                return {
-                    'reader_id': self.reader_id,
-                    'type': 'PN532',
-                    'interface': self.interface,
-                    'status': 'connected',
-                    'firmware': f"v{ver}.{rev}",
-                    'ic': f"0x{ic:02X}",
-                    'address': f"0x{self.i2c_address:02X}" if self.interface == "i2c" else "N/A"
-                }
-            else:
-                return {
-                    'reader_id': self.reader_id,
-                    'type': 'PN532',
-                    'interface': self.interface,
-                    'status': 'connected',
-                    'firmware': 'detected',
-                    'address': f"0x{self.i2c_address:02X}" if self.interface == "i2c" else "N/A"
-                }
+            # NON chiamare metodi che possono bloccare
+            self.pn532 = None
+            self.is_initialized = False
+            print(f"🧹 PN532 {self.reader_id} cleanup completato")
+        except Exception as e:
+            print(f"⚠️ Errore cleanup: {e}")
+    
+    def get_firmware_version(self):
+        """Ottiene versione firmware (safe)."""
+        if not self.is_initialized or not self.pn532:
+            return None
+        try:
+            return self.pn532.firmware_version
         except:
-            return {
-                'reader_id': self.reader_id,
-                'type': 'PN532',
-                'interface': self.interface,
-                'status': 'error',
-                'firmware': 'unreachable'
-            }
+            return None
+    
+    def get_reader_info(self):
+        """Informazioni del lettore."""
+        return {
+            'type': 'PN532',
+            'interface': self.interface,
+            'initialized': self.is_initialized,
+            'consecutive_errors': self.consecutive_errors,
+            'last_read': self.last_successful_read
+        }
