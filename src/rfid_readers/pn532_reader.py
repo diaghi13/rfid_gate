@@ -207,13 +207,10 @@ class PN532Reader(BaseRFIDReader):
             
             # Converte UID nel formato che si aspetta la classe base
             if isinstance(uid, (bytes, bytearray)):
-                # Converte bytes in lista di hex strings per compatibilità con format_card_uid
-                uid_hex_list = [f"0x{b:02x}" for b in uid]
-                # Anche calcola come intero per il debounce
+                # Calcola come intero per il debounce e formatting
                 card_id = int.from_bytes(uid, byteorder='big')
             else:
                 # Se è già una lista o altro formato
-                uid_hex_list = [hex(byte) if isinstance(byte, int) else str(byte) for byte in uid]
                 card_id = uid if isinstance(uid, int) else hash(str(uid))
             
             # Applica debounce usando card_id numerico
@@ -221,7 +218,11 @@ class PN532Reader(BaseRFIDReader):
                 return None, None  # Ignora per debounce
             
             # Formatta UID usando il metodo della classe base (che gestisce Config)
-            formatted_uid = self.format_card_uid(uid_hex_list)
+            # Passa i bytes originali o il card_id intero
+            if isinstance(uid, (bytes, bytearray)):
+                formatted_uid = self.format_card_uid(uid)  # Passa bytes direttamente
+            else:
+                formatted_uid = self.format_card_uid(card_id)  # Passa intero
             
             # Crea card_data come dictionary con tutte le info (come nel commit funzionante)
             card_data = {
