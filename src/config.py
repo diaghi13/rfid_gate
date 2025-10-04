@@ -122,6 +122,12 @@ class Config:
     # RFID Debounce
     RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
     
+    # Card reading interval
+    CARD_READ_INTERVAL = float(os.getenv('CARD_READ_INTERVAL', '0.1'))
+    
+    # PN532 specific timeout
+    PN532_READ_TIMEOUT = float(os.getenv('PN532_READ_TIMEOUT', '0.01'))
+    
     # Anti-crosstalk per dual readers
     GLOBAL_DEBOUNCE_TIME = float(os.getenv('GLOBAL_DEBOUNCE_TIME', '0.8'))
     
