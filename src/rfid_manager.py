@@ -59,7 +59,8 @@ class RFIDManager:
                     print("   🔧 Su Raspberry Pi: pip3 install adafruit-circuitpython-pn532")
                     print("   🔧 Verifica jumper I2C: LSB=●, MSB=○")
                     print("   🔧 Test: i2cdetect -y 1 (deve mostrare 24)")
-                    return False
+                    print("   ⚠️ Continuiamo in modalità degradata (come prima)")
+                    # IMPORTANTE: Non return False qui - continuiamo come prima!
             
             # Lettore OUT
             if Config.ENABLE_OUT_READER:
@@ -88,14 +89,17 @@ class RFIDManager:
                     print("   🔧 Su Raspberry Pi: pip3 install adafruit-circuitpython-pn532")
                     print("   🔧 Verifica jumper SPI: LSB=○, MSB=●")
                     print("   🔧 Test: ls /dev/spidev* (deve mostrare spi0.0)")
-                    return False
+                    print("   ⚠️ Continuiamo in modalità degradata (come prima)")
+                    # IMPORTANTE: Non return False qui - continuiamo come prima!
             
             if not self.readers:
-                print("❌ Nessun lettore configurato")
-                return False
+                print("⚠️ Nessun lettore hardware inizializzato")
+                print("   🔧 Sistema in modalità degradata - alcune funzioni limitate")
+                print("   ✅ Ma continueremo comunque (come prima)")
             
             self.is_initialized = True
-            print(f"✅ RFID Manager inizializzato - {len(self.readers)} lettori attivi")
+            reader_count = len(self.readers) if self.readers else 0
+            print(f"✅ RFID Manager inizializzato - {reader_count} lettori hardware attivi")
             return True
             
         except Exception as e:
