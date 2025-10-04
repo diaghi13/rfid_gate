@@ -122,6 +122,9 @@ class Config:
     # RFID Debounce
     RFID_DEBOUNCE_TIME = float(os.getenv('RFID_DEBOUNCE_TIME', '2.0'))
     
+    # Anti-crosstalk per dual readers
+    GLOBAL_DEBOUNCE_TIME = float(os.getenv('GLOBAL_DEBOUNCE_TIME', '0.8'))
+    
     # RFID Reader Types - Supporto per MFRC522 e PN532
     RFID_IN_READER_TYPE = os.getenv('RFID_IN_READER_TYPE', 'mfrc522')  # mfrc522, pn532
     RFID_OUT_READER_TYPE = os.getenv('RFID_OUT_READER_TYPE', 'mfrc522')  # mfrc522, pn532

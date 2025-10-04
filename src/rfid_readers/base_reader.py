@@ -14,6 +14,9 @@ class BaseRFIDReader(ABC):
         self.last_card_id = None
         self.last_read_time = 0
         self.debounce_time = kwargs.get('debounce_time', 2.0)
+        
+        # Debounce per lettore separato - CHIAVE per dual reader
+        self.reader_debounce_key = f"reader_{self.reader_id}"
     
     @abstractmethod
     def initialize(self):
@@ -36,12 +39,13 @@ class BaseRFIDReader(ABC):
         pass
     
     def apply_debounce(self, card_id):
-        """Applica debounce per evitare letture multiple"""
+        """Applica debounce PER LETTORE per evitare letture multiple"""
         current_time = time.time()
         
+        # Debounce specifico per questo lettore
         if (card_id == self.last_card_id and 
             (current_time - self.last_read_time) < self.debounce_time):
-            return False  # Ignora lettura duplicata
+            return False  # Ignora lettura duplicata DELLO STESSO LETTORE
         
         self.last_card_id = card_id
         self.last_read_time = current_time

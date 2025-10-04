@@ -21,7 +21,7 @@ class RFIDManager:
         
         # Anti-crosstalk: debounce globale tra lettori
         self.global_debounce = {}  # {card_id: {"time": timestamp, "reader": reader_id}}
-        self.global_debounce_time = getattr(Config, 'GLOBAL_DEBOUNCE_TIME', 0.8)  # Configurabile
+        self.global_debounce_time = 0.5  # 500ms tra letture della stessa card su lettori diversi
         self.debounce_lock = threading.Lock()
     
     def initialize(self):
