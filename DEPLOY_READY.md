@@ -57,8 +57,8 @@ PYTHONPATH=src python3 src/main.py
 
 ## 🔧 PROBLEMA RISOLTO
 
-❌ **Era**: `read_card()` restituiva `(uid_hex, 'mifare')` 
-✅ **Ora**: `read_card()` restituisce `(card_id, card_data)` 
+❌ **Era**: `read_card()` restituiva `(uid_hex, 'mifare')`
+✅ **Ora**: `read_card()` restituisce `(card_id, card_data)`
 
 Il sistema ora è **COMPATIBILE** con l'interfaccia che il RFIDManager si aspetta.
 
