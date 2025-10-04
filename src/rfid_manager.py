@@ -184,12 +184,18 @@ class RFIDManager:
                         if isinstance(card_data, dict):
                             card_data['reader_id'] = reader_id
                         
-                        # Invia a queue per processamento
+                        # Determina direction basata sul reader_id
+                        direction = 'in' if 'in' in reader_id.lower() else 'out'
+                        
+                        # Invia a queue per processamento con campi necessari per main.py
                         self.card_queue.put({
                             'reader_id': reader_id,
                             'card_id': card_id,
                             'card_data': card_data,
-                            'timestamp': time.time()
+                            'timestamp': time.time(),
+                            'uid_formatted': card_id,  # card_id è già l'UID formattato dal reader
+                            'direction': direction,
+                            'uid': card_id  # Compatibilità
                         })
                         
                         print(f"📇 {reader_id} - Carta: {card_id} (PN532-4byte)")
