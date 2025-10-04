@@ -155,6 +155,18 @@ class RFIDManager:
         print("✅ RFID Manager avviato")
         return True
     
+    def start_reading(self):
+        """Alias per start() - compatibilità"""
+        return self.start()
+    
+    def get_active_readers(self):
+        """Restituisce lista dei lettori attivi"""
+        return list(self.readers.keys())
+    
+    def wait_for_card(self, timeout=None):
+        """Alias per get_next_card() - compatibilità"""
+        return self.get_next_card(timeout)
+    
     def _reader_loop(self, reader_id, reader):
         """Loop di lettura per singolo lettore."""
         print(f"🔄 Loop lettura avviato per {reader_id}")
