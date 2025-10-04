@@ -194,72 +194,71 @@ class PN532Reader(BaseRFIDReader):
             return False
     
     def read_card(self):
-        """
-        Lettura card ROBUSTA - Design anti-blocco.
-        """
+        """Legge una carta RFID/NFC - COMPATIBILE CON SISTEMA ESISTENTE."""
         if not self.is_initialized or not self.pn532:
-            return None, None
-        
-        current_time = time.time()
-        
-        # Rate limiting: max 1 lettura ogni 100ms
-        if (current_time - self.last_successful_read) < 0.1:
-            return None, None
+            return None, None  # Restituisce tupla per compatibilità
         
         try:
-            # ⚡ TIMEOUT BREVISSIMO - chiave del successo!
-            # 0.01s = 10ms - troppo breve per creare blocchi
-            uid = self.pn532.read_passive_target(timeout=0.01)
+            # Legge UID della carta con timeout breve per performance
+            uid = self.pn532.read_passive_target(timeout=0.1)
             
-            if uid is not None:
-                # Reset errori consecutivi
-                self.consecutive_errors = 0
-                self.last_successful_read = current_time
-                
-                # Converti UID
-                if isinstance(uid, (bytes, bytearray)):
-                    card_id = int.from_bytes(uid, byteorder='big')
-                else:
-                    card_id = uid
-                
-                # Applica debounce
-                if not self.apply_debounce(card_id):
-                    return None, None
-                
-                # Formatazione UID per compatibilità
-                formatted_uid = self.format_card_uid(str(card_id))
-                
-                card_data = {
-                    'uid': formatted_uid,
-                    'timestamp': current_time,
-                    'reader_interface': self.interface,
-                    'reader_id': self.reader_id
-                }
-                
-                return formatted_uid, card_data
+            if uid is None:
+                return None, None  # Nessuna carta rilevata
             
-            return None, None
+            # Converte UID nel formato che si aspetta la classe base
+            if isinstance(uid, (bytes, bytearray)):
+                # Converte bytes in lista di hex strings per compatibilità con format_card_uid
+                uid_hex_list = [f"0x{b:02x}" for b in uid]
+                # Anche calcola come intero per il debounce
+                card_id = int.from_bytes(uid, byteorder='big')
+            else:
+                # Se è già una lista o altro formato
+                uid_hex_list = [hex(byte) if isinstance(byte, int) else str(byte) for byte in uid]
+                card_id = uid if isinstance(uid, int) else hash(str(uid))
+            
+            # Applica debounce usando card_id numerico
+            if not self.apply_debounce(card_id):
+                return None, None  # Ignora per debounce
+            
+            # Formatta UID usando il metodo della classe base (che gestisce Config)
+            formatted_uid = self.format_card_uid(uid_hex_list)
+            
+            # Crea card_data come dictionary con tutte le info (come nel commit funzionante)
+            card_data = {
+                'uid': formatted_uid,
+                'raw_id': card_id,
+                'uid_formatted': formatted_uid,
+                'uid_hex': f"0x{card_id:X}" if isinstance(card_id, int) else str(card_id),
+                'data': None,  # PN532 non legge automaticamente dati NDEF
+                'data_length': 0,
+                'type': f"PN532-{len(uid)}byte",
+                'reader_id': self.reader_id,
+                'reader_type': 'PN532',
+                'timestamp': time.time(),
+                'reader_interface': self.interface
+            }
+            
+            print(f"📇 {self.reader_id} - Carta: {formatted_uid} (PN532-{len(uid)}byte)")
+            
+            # Debug se abilitato
+            try:
+                from config import Config
+                if hasattr(Config, 'UID_DEBUG_MODE') and Config.UID_DEBUG_MODE:
+                    raw_hex = ''.join([f'{b:02X}' for b in uid]) if isinstance(uid, (bytes, bytearray)) else str(uid)
+                    print(f"🔧 PN532 UID: raw={raw_hex}, formatted={formatted_uid}, mode={getattr(Config, 'UID_FORMAT_MODE', 'default')}")
+            except:
+                pass
+            
+            # Restituisce tupla compatibile: (card_id, card_data)
+            # dove card_id è l'ID formattato e card_data è il dictionary completo
+            return formatted_uid, card_data
             
         except Exception as e:
+            # Non stampiamo errore per timeout normale
             error_msg = str(e).lower()
-            
-            # Ignora errori normali (timeout, no card)
-            if any(x in error_msg for x in ['timeout', 'no card found']):
-                return None, None
-            
-            # Gestisci errori gravi (checksum, response length)
-            if any(x in error_msg for x in ['checksum', 'response length', 'ack']):
-                self.consecutive_errors += 1
-                
-                if self.consecutive_errors >= self.max_consecutive_errors:
-                    print(f"⚠️ PN532 {self.reader_id}: {self.consecutive_errors} errori, soft reset...")
-                    self._soft_reset()
-                    self.consecutive_errors = 0
-                    
-                    # Pausa breve dopo reset
-                    time.sleep(0.1)
-            
-            return None, None
+            if not any(x in error_msg for x in ['timeout', 'no card', 'did not receive', 'ack']):
+                print(f"❌ Errore lettura PN532: {e}")
+            return None, None  # Sempre restituire tupla
     
     def _soft_reset(self):
         """
