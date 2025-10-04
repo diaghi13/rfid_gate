@@ -207,6 +207,10 @@ class RFIDManager:
         except Empty:
             return None
     
+    def stop_reading(self):
+        """Ferma la lettura (alias per stop)."""
+        self.stop()
+    
     def stop(self):
         """Ferma il manager."""
         print("🛑 Arresto RFID Manager...")
