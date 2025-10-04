@@ -50,12 +50,15 @@ class RFIDManager:
                 if reader_in.initialize():
                     if reader_in.test_connection():
                         self.readers["in"] = reader_in
-                        print("✅ RFID Reader IN inizializzato")
+                        print("✅ RFID Reader IN inizializzato e testato")
                     else:
-                        print("⚠️ Test connessione IN limitato (continuiamo)")
+                        print("⚠️ RFID Reader IN inizializzato ma test connessione limitato")
                         self.readers["in"] = reader_in  # Usa comunque il reader
                 else:
-                    print("❌ Inizializzazione RFID IN fallita")
+                    print("❌ Inizializzazione RFID IN fallita - Verifica hardware e librerie")
+                    print("   🔧 Su Raspberry Pi: pip3 install adafruit-circuitpython-pn532")
+                    print("   🔧 Verifica jumper I2C: LSB=●, MSB=○")
+                    print("   🔧 Test: i2cdetect -y 1 (deve mostrare 24)")
                     return False
             
             # Lettore OUT
@@ -76,12 +79,15 @@ class RFIDManager:
                 if reader_out.initialize():
                     if reader_out.test_connection():
                         self.readers["out"] = reader_out
-                        print("✅ RFID Reader OUT inizializzato")
+                        print("✅ RFID Reader OUT inizializzato e testato")
                     else:
-                        print("⚠️ Test connessione OUT limitato (continuiamo)")
+                        print("⚠️ RFID Reader OUT inizializzato ma test connessione limitato")
                         self.readers["out"] = reader_out  # Usa comunque il reader
                 else:
-                    print("❌ Inizializzazione RFID OUT fallita")
+                    print("❌ Inizializzazione RFID OUT fallita - Verifica hardware e librerie")
+                    print("   🔧 Su Raspberry Pi: pip3 install adafruit-circuitpython-pn532")
+                    print("   🔧 Verifica jumper SPI: LSB=○, MSB=●")
+                    print("   🔧 Test: ls /dev/spidev* (deve mostrare spi0.0)")
                     return False
             
             if not self.readers:

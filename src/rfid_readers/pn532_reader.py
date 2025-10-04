@@ -197,7 +197,26 @@ class PN532Reader(BaseRFIDReader):
         """
         Lettura card ROBUSTA - Design anti-blocco.
         """
-        if not self.is_initialized or not self.pn532:
+        if not self.is_initialized:
+            # Debug: perché non è inizializzato
+            if hasattr(self, '_debug_not_init'):
+                if not self._debug_not_init:
+                    print(f"🐛 {self.reader_id}: Lettore non inizializzato")
+                    self._debug_not_init = True
+            else:
+                print(f"🐛 {self.reader_id}: Lettore non inizializzato")
+                self._debug_not_init = True
+            return None, None
+            
+        if not self.pn532:
+            # Debug: perché pn532 è None
+            if hasattr(self, '_debug_no_pn532'):
+                if not self._debug_no_pn532:
+                    print(f"🐛 {self.reader_id}: Oggetto PN532 è None (librerie mancanti?)")
+                    self._debug_no_pn532 = True
+            else:
+                print(f"🐛 {self.reader_id}: Oggetto PN532 è None (librerie mancanti?)")
+                self._debug_no_pn532 = True
             return None, None
         
         current_time = time.time()
