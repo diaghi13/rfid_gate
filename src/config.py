@@ -33,6 +33,10 @@ def load_env_file():
                 key = key.strip()
                 value = value.strip()
                 
+                # Rimuovi commenti inline
+                if '#' in value:
+                    value = value.split('#')[0].strip()
+                
                 # Rimuovi virgolette se presenti
                 if value.startswith('"') and value.endswith('"'):
                     value = value[1:-1]
