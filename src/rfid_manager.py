@@ -21,7 +21,7 @@ class RFIDManager:
         
         # Anti-crosstalk: debounce globale tra lettori
         self.global_debounce = {}  # {card_id: {"time": timestamp, "reader": reader_id}}
-        self.global_debounce_time = getattr(Config, 'GLOBAL_DEBOUNCE_TIME', 0.8)  # Configurabile
+        self.global_debounce_time = getattr(Config, 'GLOBAL_DEBOUNCE_TIME', 0.5)  # Ridotto da 0.8 a 0.5
         self.debounce_lock = threading.Lock()
     
     def initialize(self):
@@ -200,7 +200,7 @@ class RFIDManager:
                 print(f"❌ Errore lettura {reader_id}: {e}")
                 time.sleep(0.5)  # Pausa dopo errore
     
-    def get_next_card(self, timeout=0.1):
+    def get_next_card(self, timeout=1.0):
         """Ottiene prossima card dalla queue."""
         try:
             return self.card_queue.get(timeout=timeout)
