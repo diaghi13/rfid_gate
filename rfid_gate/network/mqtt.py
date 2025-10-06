@@ -1,0 +1,554 @@
+#!/usr/bin/env python3
+"""
+🌐 MQTT Client - Refactored Version
+==================================
+
+Client MQTT moderno con:
+- Async/await support
+- Auto-reconnection  
+- Message queuing
+- Type-safe configuration
+- Comprehensive error handling
+"""
+
+import asyncio
+import json
+import ssl
+import time
+from typing import Optional, Dict, Any, Callable, List
+from dataclasses import dataclass, asdict
+from enum import Enum
+import uuid
+
+# Import condizionale MQTT
+try:
+    import paho.mqtt.client as mqtt
+    HAS_MQTT = True
+except ImportError:
+    HAS_MQTT = False
+    # Mock per development
+    class mqtt:
+        class Client:
+            def __init__(self): pass
+            def username_pw_set(self, user, pwd): pass
+            def tls_set_context(self, ctx): pass
+            def on_connect(self, func): pass
+            def on_message(self, func): pass
+            def connect_async(self, host, port): pass
+            def loop_start(self): pass
+            def publish(self, topic, payload): return (0, 0)
+            def subscribe(self, topic): return (0, 0)
+            def disconnect(self): pass
+
+
+class ConnectionState(str, Enum):
+    """Stati connessione MQTT"""
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    ERROR = "error"
+
+
+@dataclass
+class MQTTMessage:
+    """Messaggio MQTT standardizzato"""
+    topic: str
+    payload: Dict[str, Any]
+    qos: int = 0
+    retain: bool = False
+    timestamp: float = None
+    message_id: str = None
+    
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+        if self.message_id is None:
+            self.message_id = str(uuid.uuid4())[:8]
+
+
+@dataclass
+class CardReadMessage:
+    """Messaggio lettura carta"""
+    tornello_id: str
+    card_uid: str
+    direction: str  # "in" o "out"
+    reader_type: str  # "mfrc522" o "pn532"
+    timestamp: float
+    raw_uid: Optional[str] = None
+    metadata: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+
+
+@dataclass
+class AuthRequest:
+    """Richiesta autenticazione"""
+    card_uid: str
+    tornello_id: str
+    direction: str
+    timestamp: float
+    request_id: str = None
+    
+    def __post_init__(self):
+        if self.request_id is None:
+            self.request_id = str(uuid.uuid4())[:8]
+
+
+class AsyncMQTTClient:
+    """
+    Client MQTT asincrono con features avanzate.
+    
+    Features:
+    - Auto-reconnection
+    - Message queuing offline
+    - Type-safe messaging
+    - Event callbacks
+    - Connection monitoring
+    """
+    
+    def __init__(self, config_mqtt):
+        self.config = config_mqtt
+        self.client: Optional[mqtt.Client] = None
+        self.state = ConnectionState.DISCONNECTED
+        self.connection_attempts = 0
+        self.max_retries = 3
+        self.reconnect_delay = 5.0
+        
+        # Message queuing
+        self.message_queue: List[MQTTMessage] = []
+        self.max_queue_size = 1000
+        
+        # Auth system
+        self.auth_responses: Dict[str, Dict[str, Any]] = {}
+        self.pending_auths: Dict[str, AuthRequest] = {}
+        self.auth_timeout = 5.0
+        
+        # Callbacks
+        self.on_connected: Optional[Callable[[], None]] = None
+        self.on_disconnected: Optional[Callable[[], None]] = None
+        self.on_message: Optional[Callable[[str, Dict[str, Any]], None]] = None
+        self.on_auth_response: Optional[Callable[[str, Dict[str, Any]], None]] = None
+        
+        # Tasks
+        self._reconnect_task: Optional[asyncio.Task] = None
+        self._queue_processor_task: Optional[asyncio.Task] = None
+        
+        # Statistics
+        self.stats = {
+            'messages_sent': 0,
+            'messages_received': 0,
+            'messages_queued': 0,
+            'connection_attempts': 0,
+            'reconnections': 0,
+            'auth_requests': 0,
+            'auth_responses': 0
+        }
+    
+    async def initialize(self) -> bool:
+        """
+        Inizializza client MQTT.
+        
+        Returns:
+            bool: True se inizializzazione riuscita
+        """
+        if not HAS_MQTT:
+            print("❌ Libreria paho-mqtt non disponibile")
+            return False
+        
+        try:
+            print("🌐 Inizializzazione client MQTT...")
+            
+            # Crea client
+            self.client = mqtt.Client()
+            
+            # Configura autenticazione
+            if self.config.username and self.config.password:
+                self.client.username_pw_set(self.config.username, self.config.password)
+                print(f"🔐 Autenticazione configurata: {self.config.username}")
+            
+            # Configura TLS
+            if self.config.use_tls:
+                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                self.client.tls_set_context(context)
+                print("🔒 TLS configurato")
+            
+            # Imposta callbacks
+            self.client.on_connect = self._on_connect
+            self.client.on_disconnect = self._on_disconnect
+            self.client.on_message = self._on_message
+            self.client.on_publish = self._on_publish
+            
+            # Avvia task per processing coda
+            self._queue_processor_task = asyncio.create_task(self._process_queue())
+            
+            print("✅ Client MQTT inizializzato")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Errore inizializzazione MQTT: {e}")
+            return False
+    
+    async def connect(self) -> bool:
+        """
+        Connette al broker MQTT.
+        
+        Returns:
+            bool: True se connessione riuscita
+        """
+        if not self.client:
+            print("❌ Client MQTT non inizializzato")
+            return False
+        
+        try:
+            self.state = ConnectionState.CONNECTING
+            self.connection_attempts += 1
+            self.stats['connection_attempts'] += 1
+            
+            print(f"🔌 Connessione a {self.config.broker}:{self.config.port}...")
+            
+            # Connessione asincrona
+            loop = asyncio.get_event_loop()
+            
+            def _connect():
+                return self.client.connect_async(self.config.broker, self.config.port, self.config.keep_alive)
+            
+            result = await loop.run_in_executor(None, _connect)
+            
+            # Avvia loop MQTT
+            self.client.loop_start()
+            
+            # Attendi connessione con timeout
+            for _ in range(50):  # 5 secondi max
+                if self.state == ConnectionState.CONNECTED:
+                    return True
+                await asyncio.sleep(0.1)
+            
+            print("⚠️ Timeout connessione MQTT")
+            return False
+            
+        except Exception as e:
+            self.state = ConnectionState.ERROR
+            print(f"❌ Errore connessione MQTT: {e}")
+            return False
+    
+    def _on_connect(self, client, userdata, flags, rc):
+        """Callback connessione MQTT"""
+        if rc == 0:
+            self.state = ConnectionState.CONNECTED
+            self.connection_attempts = 0
+            print("✅ MQTT connesso")
+            
+            # Subscribe ai topic necessari
+            auth_topic = f"gate/+/{self.config.auth_response_topic.split('/')[-1]}"
+            manual_topic = f"gate/+/manual_open"
+            
+            client.subscribe(auth_topic)
+            client.subscribe(manual_topic)
+            
+            print(f"📧 Sottoscritto a: {auth_topic}, {manual_topic}")
+            
+            # Callback utente
+            if self.on_connected:
+                try:
+                    self.on_connected()
+                except Exception as e:
+                    print(f"❌ Errore callback connected: {e}")
+        else:
+            self.state = ConnectionState.ERROR
+            print(f"❌ Connessione MQTT fallita: {rc}")
+    
+    def _on_disconnect(self, client, userdata, rc):
+        """Callback disconnessione MQTT"""
+        self.state = ConnectionState.DISCONNECTED
+        print(f"🔌 MQTT disconnesso (rc: {rc})")
+        
+        # Avvia riconnessione automatica
+        if not self._reconnect_task or self._reconnect_task.done():
+            self._reconnect_task = asyncio.create_task(self._auto_reconnect())
+        
+        # Callback utente
+        if self.on_disconnected:
+            try:
+                self.on_disconnected()
+            except Exception as e:
+                print(f"❌ Errore callback disconnected: {e}")
+    
+    def _on_message(self, client, userdata, msg):
+        """Callback messaggio ricevuto"""
+        try:
+            self.stats['messages_received'] += 1
+            
+            topic = msg.topic
+            payload = json.loads(msg.payload.decode())
+            
+            print(f"📨 MQTT ricevuto: {topic}")
+            
+            # Gestione auth response
+            if 'auth_response' in topic:
+                self._handle_auth_response(payload)
+            
+            # Callback utente
+            if self.on_message:
+                try:
+                    self.on_message(topic, payload)
+                except Exception as e:
+                    print(f"❌ Errore callback message: {e}")
+                    
+        except Exception as e:
+            print(f"❌ Errore processing messaggio: {e}")
+    
+    def _on_publish(self, client, userdata, mid):
+        """Callback pubblicazione completata"""
+        self.stats['messages_sent'] += 1
+    
+    def _handle_auth_response(self, payload: Dict[str, Any]):
+        """Gestisce risposta autenticazione"""
+        try:
+            request_id = payload.get('request_id')
+            if request_id and request_id in self.pending_auths:
+                self.auth_responses[request_id] = payload
+                del self.pending_auths[request_id]
+                self.stats['auth_responses'] += 1
+                
+                if self.on_auth_response:
+                    self.on_auth_response(request_id, payload)
+                    
+        except Exception as e:
+            print(f"❌ Errore gestione auth response: {e}")
+    
+    async def _auto_reconnect(self):
+        """Riconnessione automatica"""
+        while self.state == ConnectionState.DISCONNECTED:
+            try:
+                await asyncio.sleep(self.reconnect_delay)
+                
+                if self.connection_attempts < self.max_retries:
+                    print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}")
+                    success = await self.connect()
+                    
+                    if success:
+                        self.stats['reconnections'] += 1
+                        break
+                else:
+                    print(f"❌ Max tentativi riconnessione raggiunti ({self.max_retries})")
+                    self.state = ConnectionState.ERROR
+                    break
+                    
+            except Exception as e:
+                print(f"❌ Errore riconnessione: {e}")
+                await asyncio.sleep(self.reconnect_delay)
+    
+    async def _process_queue(self):
+        """Processore coda messaggi"""
+        while True:
+            try:
+                if (self.state == ConnectionState.CONNECTED and 
+                    self.message_queue and self.client):
+                    
+                    # Processa messaggi in coda
+                    messages_to_send = self.message_queue[:10]  # Max 10 alla volta
+                    self.message_queue = self.message_queue[10:]
+                    
+                    for msg in messages_to_send:
+                        try:
+                            payload_str = json.dumps(msg.payload)
+                            result = self.client.publish(msg.topic, payload_str, msg.qos, msg.retain)
+                            
+                            if result.rc == 0:
+                                print(f"📤 MQTT inviato: {msg.topic}")
+                            else:
+                                print(f"❌ MQTT invio fallito: {result.rc}")
+                                
+                        except Exception as e:
+                            print(f"❌ Errore invio messaggio: {e}")
+                
+                await asyncio.sleep(0.1)  # 100ms delay
+                
+            except Exception as e:
+                print(f"❌ Errore processore coda: {e}")
+                await asyncio.sleep(1)
+    
+    async def send_card_read(self, card_message: CardReadMessage) -> bool:
+        """
+        Invia messaggio lettura carta.
+        
+        Args:
+            card_message: Messaggio carta letta
+            
+        Returns:
+            bool: True se inviato/accodato con successo
+        """
+        try:
+            # Crea topic
+            topic = f"gate/{card_message.tornello_id}/card_read"
+            
+            # Crea payload
+            payload = asdict(card_message)
+            
+            # Crea messaggio MQTT
+            mqtt_msg = MQTTMessage(
+                topic=topic,
+                payload=payload,
+                qos=0
+            )
+            
+            return await self._send_message(mqtt_msg)
+            
+        except Exception as e:
+            print(f"❌ Errore invio card read: {e}")
+            return False
+    
+    async def send_auth_request(self, auth_request: AuthRequest) -> Optional[str]:
+        """
+        Invia richiesta autenticazione.
+        
+        Args:
+            auth_request: Richiesta autenticazione
+            
+        Returns:
+            Optional[str]: Request ID se inviato, None se errore
+        """
+        try:
+            # Registra richiesta pending
+            self.pending_auths[auth_request.request_id] = auth_request
+            self.stats['auth_requests'] += 1
+            
+            # Crea topic
+            topic = f"gate/{auth_request.tornello_id}/auth_request"
+            
+            # Crea payload
+            payload = asdict(auth_request)
+            
+            # Crea messaggio MQTT
+            mqtt_msg = MQTTMessage(
+                topic=topic,
+                payload=payload,
+                qos=1  # QoS 1 per auth
+            )
+            
+            success = await self._send_message(mqtt_msg)
+            
+            if success:
+                return auth_request.request_id
+            else:
+                # Rimuovi da pending se invio fallito
+                self.pending_auths.pop(auth_request.request_id, None)
+                return None
+                
+        except Exception as e:
+            print(f"❌ Errore invio auth request: {e}")
+            return None
+    
+    async def wait_auth_response(self, request_id: str, timeout: float = None) -> Optional[Dict[str, Any]]:
+        """
+        Attende risposta autenticazione.
+        
+        Args:
+            request_id: ID richiesta
+            timeout: Timeout in secondi
+            
+        Returns:
+            Optional[Dict[str, Any]]: Risposta auth o None se timeout
+        """
+        timeout = timeout or self.auth_timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            if request_id in self.auth_responses:
+                response = self.auth_responses.pop(request_id)
+                return response
+            
+            await asyncio.sleep(0.1)
+        
+        # Timeout - rimuovi da pending
+        self.pending_auths.pop(request_id, None)
+        return None
+    
+    async def _send_message(self, message: MQTTMessage) -> bool:
+        """
+        Invia messaggio (diretto o accodato).
+        
+        Args:
+            message: Messaggio da inviare
+            
+        Returns:
+            bool: True se inviato/accodato con successo
+        """
+        if self.state == ConnectionState.CONNECTED and self.client:
+            # Invio diretto
+            try:
+                payload_str = json.dumps(message.payload)
+                result = self.client.publish(message.topic, payload_str, message.qos, message.retain)
+                
+                if result.rc == 0:
+                    print(f"📤 MQTT inviato: {message.topic}")
+                    return True
+                else:
+                    print(f"❌ MQTT invio fallito: {result.rc}")
+                    return False
+                    
+            except Exception as e:
+                print(f"❌ Errore invio diretto: {e}")
+                return False
+        else:
+            # Accoda per invio successivo
+            if len(self.message_queue) < self.max_queue_size:
+                self.message_queue.append(message)
+                self.stats['messages_queued'] += 1
+                print(f"📥 MQTT accodato: {message.topic} (coda: {len(self.message_queue)})")
+                return True
+            else:
+                print(f"❌ Coda MQTT piena ({self.max_queue_size})")
+                return False
+    
+    def is_connected(self) -> bool:
+        """Verifica se connesso"""
+        return self.state == ConnectionState.CONNECTED
+    
+    def get_queue_size(self) -> int:
+        """Dimensione coda messaggi"""
+        return len(self.message_queue)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Statistiche client"""
+        return {
+            **self.stats,
+            'state': self.state.value,
+            'connection_attempts': self.connection_attempts,
+            'queue_size': len(self.message_queue),
+            'pending_auths': len(self.pending_auths)
+        }
+    
+    async def cleanup(self):
+        """Cleanup client MQTT"""
+        try:
+            # Cancella tasks
+            if self._reconnect_task and not self._reconnect_task.done():
+                self._reconnect_task.cancel()
+            
+            if self._queue_processor_task and not self._queue_processor_task.done():
+                self._queue_processor_task.cancel()
+            
+            # Disconnetti client
+            if self.client:
+                self.client.loop_stop()
+                self.client.disconnect()
+            
+            print("🧹 MQTT client cleanup completato")
+            
+        except Exception as e:
+            print(f"❌ Errore cleanup MQTT: {e}")
+
+
+# Export
+__all__ = [
+    'AsyncMQTTClient',
+    'MQTTMessage',
+    'CardReadMessage', 
+    'AuthRequest',
+    'ConnectionState'
+]
