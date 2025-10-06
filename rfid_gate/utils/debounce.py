@@ -138,6 +138,27 @@ class GlobalDebounceManager:
         """Aggiorna tempo di debounce"""
         self.global_debounce_time = max(0.1, debounce_time)
     
+    def reset_stats(self) -> None:
+        """Reset delle statistiche"""
+        self.stats = {
+            'total_checks': 0,
+            'duplicates_detected': 0,
+            'global_blocks': 0,
+            'direction_blocks': 0
+        }
+    
+    def get_last_read_info(self, direction: str) -> Optional[DebounceEntry]:
+        """
+        Restituisce informazioni ultima lettura per direzione.
+        
+        Args:
+            direction: Direzione da controllare
+            
+        Returns:
+            Optional[DebounceEntry]: Entry ultima lettura o None
+        """
+        return self.last_reads.get(direction)
+    
     def get_time_since_last_read(self, direction: str = None) -> Optional[float]:
         """
         Tempo trascorso dall'ultima lettura.
