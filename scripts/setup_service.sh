@@ -67,13 +67,13 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-User=$SERVICE_USER
-Group=$SERVICE_USER
+User=root
+Group=root
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=PYTHONPATH=$PROJECT_DIR/src
+Environment=PYTHONPATH=$PROJECT_DIR
 ExecStartPre=/bin/sleep 5
-ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/src/main.py
+ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/main.py
 ExecStop=/bin/kill -INT \$MAINPID
 ExecStopPost=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/tools/emergency_stop.py all
 

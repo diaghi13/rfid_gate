@@ -95,12 +95,21 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 echo -e "${YELLOW}📋 Copia file progetto...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Copia struttura src
-if [ -d "$SCRIPT_DIR/src" ]; then
-    cp -r "$SCRIPT_DIR/src" "$PROJECT_DIR/"
-    echo -e "${GREEN}✅ Copiato directory src${NC}"
+# Copia nuova struttura modulare rfid_gate
+if [ -d "$SCRIPT_DIR/rfid_gate" ]; then
+    cp -r "$SCRIPT_DIR/rfid_gate" "$PROJECT_DIR/"
+    echo -e "${GREEN}✅ Copiato directory rfid_gate${NC}"
 else
-    echo -e "${RED}❌ Directory src non trovata${NC}"
+    echo -e "${RED}❌ Directory rfid_gate non trovata${NC}"
+    exit 1
+fi
+
+# Copia main.py di compatibilità
+if [ -f "$SCRIPT_DIR/main.py" ]; then
+    cp "$SCRIPT_DIR/main.py" "$PROJECT_DIR/"
+    echo -e "${GREEN}✅ Copiato main.py${NC}"
+else
+    echo -e "${RED}❌ File main.py non trovato${NC}"
     exit 1
 fi
 
@@ -116,15 +125,12 @@ fi
 # Copia file tools
 echo -e "${YELLOW}📋 Copia file tools...${NC}"
 TOOL_FILES=(
-    "src/offline_utils.py"
-    "src/manual_open_tool.py" 
-    "src/log_viewer.py"
-    "src/emergency_stop.py"
     "tools/emergency_stop.py"
     "tools/offline_diagnostics.py"
     "tools/offline_utils.py"
     "tools/log_viewer.py"
     "tools/manual_open_tool.py"
+    "tools/rfid_diagnostic.py"
 )
 
 for tool_file in "${TOOL_FILES[@]}"; do
@@ -144,11 +150,11 @@ fi
 # Copia file configurazione esempi
 echo -e "${YELLOW}📋 Copia file configurazione...${NC}"
 CONFIG_FILES=(
-    "config/examples/bidirezionale.env"
-    "config/examples/unidirezionale.env"
+    ".env.example"
     "docs/CONFIGURATION_EXAMPLES.md"
     "docs/MANUAL_CONTROL.md"
     "docs/OFFLINE_SYSTEM.md"
+    "docs/PN532_QUICK_GUIDE.md"
     "scripts/config_example.md"
     "scripts/config_example.sh"
 )
@@ -211,50 +217,50 @@ MQTT_USE_TLS=True
 TORNELLO_ID=tornello_01
 
 # Configurazione Sistema Unidirezionale (un solo lettore per iniziare)
-BIDIRECTIONAL_MODE=False
-ENABLE_IN_READER=True
-ENABLE_OUT_READER=False
+BIDIRECTIONAL_MODE=false
+ENABLE_IN_READER=true
+ENABLE_OUT_READER=false
 
-# Configurazione RFID Reader IN
+# Configurazione RFID Reader IN (MFRC522)
+RFID_IN_READER_TYPE=mfrc522
 RFID_IN_RST_PIN=22
 RFID_IN_SDA_PIN=8
-RFID_IN_ENABLE=True
 
 # Configurazione RFID Reader OUT (disabilitato)
+RFID_OUT_READER_TYPE=mfrc522
 RFID_OUT_RST_PIN=25
 RFID_OUT_SDA_PIN=7
-RFID_OUT_ENABLE=False
 
 # Configurazione Relè IN
+RELAY_IN_ENABLE=true
 RELAY_IN_PIN=18
 RELAY_IN_ACTIVE_TIME=2
-RELAY_IN_ACTIVE_LOW=True
-RELAY_IN_INITIAL_STATE=HIGH
-RELAY_IN_ENABLE=True
+RELAY_IN_ACTIVE_LOW=true
+RELAY_IN_INITIAL_STATE=LOW
 
 # Configurazione Relè OUT (disabilitato)
+RELAY_OUT_ENABLE=false
 RELAY_OUT_PIN=19
 RELAY_OUT_ACTIVE_TIME=2
-RELAY_OUT_ACTIVE_LOW=True
-RELAY_OUT_INITIAL_STATE=HIGH
-RELAY_OUT_ENABLE=False
+RELAY_OUT_ACTIVE_LOW=true
+RELAY_OUT_INITIAL_STATE=LOW
 
 # Configurazione Autenticazione
-AUTH_ENABLED=True
+AUTH_ENABLED=true
 AUTH_TIMEOUT=10
 AUTH_TOPIC_SUFFIX=auth_response
 
 # Configurazione Apertura Manuale
-MANUAL_OPEN_ENABLED=True
+MANUAL_OPEN_ENABLED=true
 MANUAL_OPEN_TOPIC_SUFFIX=manual_open
 MANUAL_OPEN_RESPONSE_TOPIC_SUFFIX=manual_response
 MANUAL_OPEN_TIMEOUT=10
-MANUAL_OPEN_AUTH_REQUIRED=True
+MANUAL_OPEN_AUTH_REQUIRED=true
 
 # Configurazione Fallback Offline
-OFFLINE_MODE_ENABLED=True
-OFFLINE_ALLOW_ACCESS=True
-OFFLINE_SYNC_ENABLED=True
+OFFLINE_MODE_ENABLED=true
+OFFLINE_ALLOW_ACCESS=true
+OFFLINE_SYNC_ENABLED=true
 OFFLINE_STORAGE_FILE=offline_queue.json
 OFFLINE_MAX_QUEUE_SIZE=1000
 CONNECTION_CHECK_INTERVAL=30
@@ -264,16 +270,18 @@ CONNECTION_RETRY_ATTEMPTS=3
 LOG_DIRECTORY=logs
 LOG_LEVEL=INFO
 LOG_RETENTION_DAYS=30
-ENABLE_CONSOLE_LOG=False
+ENABLE_CONSOLE_LOG=false
 
 # Configurazione RFID Debounce
 RFID_DEBOUNCE_TIME=2.0
+CARD_READ_INTERVAL=0.15
+GLOBAL_DEBOUNCE_TIME=0.8
 
-# Configurazione UID Processing (opzionale)
+# Configurazione UID Processing
 UID_FORMAT_MODE=remove_suffix
 UID_CHARS_COUNT=2
 UID_TARGET_LENGTH=8
-UID_DEBUG_MODE=False
+UID_DEBUG_MODE=false
 EOF
         echo -e "${GREEN}✅ File .env creato con configurazione base${NC}"
     fi
@@ -295,7 +303,7 @@ User=root
 Group=root
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin
-ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/src/main.py
+ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/main.py
 ExecStop=/bin/kill -INT \$MAINPID
 Restart=always
 RestartSec=10
@@ -350,15 +358,16 @@ cd "$PROJECT_DIR"
 # Test caricamento configurazione
 if sudo ./venv/bin/python -c "
 import sys
-sys.path.insert(0, 'src')
+sys.path.insert(0, '.')
 try:
-    from config import Config
+    from rfid_gate.config.settings import RFIDGateConfig
+    config = RFIDGateConfig.load_from_env()
     print('✅ Config caricata correttamente')
-    print(f'   Tornello ID: {Config.TORNELLO_ID}')
-    print(f'   MQTT Broker: {Config.MQTT_BROKER}')
-    print(f'   RFID IN abilitato: {Config.RFID_IN_ENABLE}')
-    print(f'   RFID OUT abilitato: {Config.RFID_OUT_ENABLE}')
-    print(f'   Relay IN abilitato: {Config.RELAY_IN_ENABLE}')
+    print(f'   Tornello ID: {config.tornello_id}')
+    print(f'   MQTT Broker: {config.mqtt_broker}')
+    print(f'   Modalità bidirezionale: {config.bidirectional_mode}')
+    print(f'   Lettore IN: {config.rfid_in_reader_type}')
+    print(f'   Lettore OUT: {config.rfid_out_reader_type if config.enable_out_reader else "Disabilitato"}')
 except Exception as e:
     print(f'❌ Errore: {e}')
     exit(1)
@@ -400,7 +409,7 @@ echo "   sudo nano $PROJECT_DIR/.env"
 echo
 echo "2. Test manuale:"
 echo "   cd $PROJECT_DIR"
-echo "   sudo ./venv/bin/python src/main.py"
+echo "   sudo ./venv/bin/python main.py"
 echo
 echo "3. Abilita e avvia servizio:"
 echo "   sudo systemctl enable rfid-gate"
@@ -417,13 +426,13 @@ echo "   sudo python3 $PROJECT_DIR/tools/log_viewer.py --stats"
 echo
 
 # Mostra configurazioni esempio disponibili
-if [ -d "$PROJECT_DIR/config/examples" ]; then
-    echo -e "${BLUE}📋 Configurazioni esempio disponibili:${NC}"
-    ls -la "$PROJECT_DIR/config/examples/"
+if [ -f "$PROJECT_DIR/.env.example" ]; then
+    echo -e "${BLUE}📋 File .env.example disponibile con tutte le opzioni documentate${NC}"
     echo
-    echo -e "${YELLOW}💡 Per copiare una configurazione esempio:${NC}"
-    echo "   sudo cp $PROJECT_DIR/config/examples/unidirezionale.env $PROJECT_DIR/.env"
-    echo "   sudo cp $PROJECT_DIR/config/examples/bidirezionale.env $PROJECT_DIR/.env"
+    echo -e "${YELLOW}💡 Per personalizzare la configurazione:${NC}"
+    echo "   sudo nano $PROJECT_DIR/.env"
+    echo "   # Oppure copia il template:"
+    echo "   sudo cp $PROJECT_DIR/.env.example $PROJECT_DIR/.env"
     echo
 fi
 

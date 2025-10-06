@@ -40,7 +40,7 @@ echo -e "${YELLOW}📋 Avvio sistema...${NC}"
 cd "$PROJECT_DIR"
 
 # Avvia come utente rfid
-sudo -u "$SERVICE_USER" ./venv/bin/python src/main.py
+sudo -u "$SERVICE_USER" ./venv/bin/python main.py
 
 # ========================================
 # 📄 scripts/stop.sh - Stop Sistema
@@ -62,7 +62,7 @@ if systemctl is-active --quiet rfid-gate 2>/dev/null; then
 fi
 
 # Trova processi Python del sistema
-PIDS=$(pgrep -f "python.*src/main.py" 2>/dev/null || true)
+PIDS=$(pgrep -f "python.*main.py" 2>/dev/null || true)
 
 if [ -n "$PIDS" ]; then
     echo -e "${YELLOW}🛑 Fermata processi manuali...${NC}"
@@ -75,10 +75,10 @@ if [ -n "$PIDS" ]; then
     sleep 2
     
     # Force kill se necessario
-    REMAINING=$(pgrep -f "python.*src/main.py" 2>/dev/null || true)
+    REMAINING=$(pgrep -f "python.*main.py" 2>/dev/null || true)
     if [ -n "$REMAINING" ]; then
         echo -e "${YELLOW}⚡ Force kill processi rimanenti...${NC}"
-        pkill -9 -f "python.*src/main.py" 2>/dev/null || true
+        pkill -9 -f "python.*main.py" 2>/dev/null || true
     fi
 fi
 
@@ -140,14 +140,11 @@ if [ -d "$SCRIPT_DIR/src" ]; then
 fi
 
 # Aggiorna tools
-if [ -d "$SCRIPT_DIR/tools" ] || [ -f "$SCRIPT_DIR/src/offline_utils.py" ]; then
-    mkdir -p "$PROJECT_DIR/tools"
-    [ -f "$SCRIPT_DIR/src/offline_utils.py" ] && cp "$SCRIPT_DIR/src/offline_utils.py" "$PROJECT_DIR/tools/"
-    [ -f "$SCRIPT_DIR/src/manual_open_tool.py" ] && cp "$SCRIPT_DIR/src/manual_open_tool.py" "$PROJECT_DIR/tools/"
-    [ -f "$SCRIPT_DIR/src/log_viewer.py" ] && cp "$SCRIPT_DIR/src/log_viewer.py" "$PROJECT_DIR/tools/"
-    [ -f "$SCRIPT_DIR/emergency_stop.py" ] && cp "$SCRIPT_DIR/emergency_stop.py" "$PROJECT_DIR/tools/"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/tools"
-    chmod +x "$PROJECT_DIR/tools"/*.py
+if [ -d \"$SCRIPT_DIR/tools\" ]; then
+    mkdir -p \"$PROJECT_DIR/tools\"
+    cp -r \"$SCRIPT_DIR/tools\"/* \"$PROJECT_DIR/tools/\" 2>/dev/null || true
+    chown -R \"$SERVICE_USER:$SERVICE_USER\" \"$PROJECT_DIR/tools\"
+    chmod +x \"$PROJECT_DIR/tools\"/*.py
     echo -e "${GREEN}✅ Tools aggiornati${NC}"
 fi
 
@@ -297,8 +294,8 @@ show_system_status() {
     fi
     
     # Memoria
-    if pgrep -f "python.*src/main.py" > /dev/null; then
-        PID=$(pgrep -f "python.*src/main.py")
+    if pgrep -f "python.*main.py" > /dev/null; then
+        PID=$(pgrep -f "python.*main.py")
         MEMORY=$(ps -p "$PID" -o rss= 2>/dev/null | awk '{print int($1/1024)"MB"}' || echo "N/A")
         echo -e "   💾 Memoria: $MEMORY"
     fi
