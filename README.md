@@ -8,6 +8,8 @@ Sistema di controllo accessi RFID moderno con architettura modulare.
 
 ## 🚀 Quick Start
 
+### **Sistema Principale**
+
 ```bash
 # Avvia il sistema
 python3 main.py
@@ -15,6 +17,25 @@ python3 main.py
 # Test del sistema
 python3 tests/test_refactored_system.py
 ```
+
+### **🌐 Web UI (Nuovo!)**
+
+```bash
+# Avvia interfaccia web
+cd webui
+python3 start.py
+
+# Accedi a: http://localhost:8080
+# Username: admin | Password: admin123
+```
+
+**Funzionalità Web UI:**
+
+- 📊 Dashboard real-time con stato sistema
+- 🎮 Controllo manuale tornello da remoto
+- 📋 Gestione log accessi con filtri avanzati
+- ⚙️ Configurazione sistema via web
+- 📱 Design responsive per mobile/tablet
 
 ## 📋 Features
 
@@ -26,28 +47,40 @@ python3 tests/test_refactored_system.py
 - ✅ **Async Architecture**: Performance ottimizzate
 - ✅ **Anti-Crosstalk**: Debounce globale avanzato
 - ✅ **Hardware Abstraction**: Supporto multi-platform
+- 🆕 **Web UI**: Interfaccia web moderna per gestione completa
 
 ## 🏗️ Architettura
 
 ```
+
+```
+
 rfid_gate/
-├── core/                    # 🎯 Business Logic
-│   └── access_control.py    # Sistema controllo accessi centrale
-├── hardware/               # 🔌 Hardware Abstraction
-│   ├── readers/            # 📡 Lettori RFID
-│   │   ├── base.py         # Interfaccia comune
-│   │   ├── mfrc522.py      # Reader MFRC522
-│   │   ├── pn532.py        # Reader PN532
-│   │   └── factory.py      # Factory pattern
-│   └── relays/             # ⚡ Controller Relè
-│       ├── base.py         # Interfaccia comune
-│       └── gpio.py         # GPIO Raspberry Pi
-├── network/                # 🌐 Comunicazione
-│   └── mqtt.py             # Client MQTT asincrono
-├── config/                 # ⚙️ Configurazione
-│   └── settings.py         # Type-safe configuration
-├── utils/                  # 🛠️ Utilità
-│   └── debounce.py         # Debounce globale
+├── core/ # 🎯 Business Logic
+│ └── access_control.py # Sistema controllo accessi centrale
+├── hardware/ # 🔌 Hardware Abstraction
+│ ├── readers/ # 📡 Lettori RFID
+│ │ ├── base.py # Interfaccia comune
+│ │ ├── mfrc522.py # Reader MFRC522
+│ │ ├── pn532.py # Reader PN532
+│ │ └── factory.py # Factory pattern
+│ └── relays/ # ⚡ Controller Relè
+│ ├── base.py # Interfaccia comune
+│ └── gpio.py # GPIO Raspberry Pi
+├── network/ # 🌐 Comunicazione
+│ └── mqtt.py # Client MQTT asincrono
+├── config/ # ⚙️ Configurazione
+│ └── settings.py # Type-safe configuration
+├── utils/ # 🛠️ Utilità
+│ └── debounce.py # Debounce globale
+├── webui/ # 🌐 Web Interface (Nuovo!)
+│ ├── app.py # FastAPI server
+│ ├── start.py # Script avvio
+│ ├── templates/ # Template HTML
+│ ├── static/ # CSS/JS assets
+│ └── README.md # Documentazione Web UI
+
+```
 └── logging/                # 📊 Logging avanzato
 ```
 

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Controllo Manuale - RFID Gate</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <h1><i class="fas fa-door-open"></i> RFID Gate System</h1>
+          <div class="user-info">
+            <span id="username">Admin</span>
+            <button onclick="logout()" class="btn btn-logout">
+              <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <a href="/" class="nav-item">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="/control" class="nav-item active">
+          <i class="fas fa-hand-pointer"></i> Controllo Manuale
+        </a>
+        <a href="/logs" class="nav-item">
+          <i class="fas fa-list"></i> Log Accessi
+        </a>
+        <a href="/config" class="nav-item">
+          <i class="fas fa-cog"></i> Configurazione
+        </a>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="main">
+        <!-- Gate Status -->
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="fas fa-door-closed"></i> Stato Tornello</h3>
+            <div class="gate-status" id="gate-status">
+              <span class="status-text">Chiuso</span>
+              <span class="status-indicator closed"></span>
+            </div>
+          </div>
+          <div class="card-content">
+            <div class="stats-row">
+              <div class="stat">
+                <span class="stat-label">Posizione:</span>
+                <span class="stat-value" id="gate-position">Chiusa</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Bloccato:</span>
+                <span class="stat-value" id="gate-locked">Sì</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Ultima azione:</span>
+                <span class="stat-value" id="last-action">Auto chiusura</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Controls -->
+        <div class="control-section">
+          <h3><i class="fas fa-hand-pointer"></i> Controllo Manuale</h3>
+
+          <!-- Direction Controls -->
+          <div class="control-grid">
+            <div class="control-card">
+              <div class="control-header">
+                <h4><i class="fas fa-arrow-right"></i> Apertura Ingresso</h4>
+                <p>Consente l'ingresso di una persona</p>
+              </div>
+              <div class="control-body">
+                <div class="duration-selector">
+                  <label for="in-duration">Durata apertura (secondi):</label>
+                  <div class="duration-controls">
+                    <button
+                      onclick="changeDuration('in', -1)"
+                      class="btn btn-sm"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      id="in-duration"
+                      value="3"
+                      min="1"
+                      max="10"
+                    />
+                    <button
+                      onclick="changeDuration('in', 1)"
+                      class="btn btn-sm"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onclick="openGate('in')"
+                  class="btn btn-success btn-large"
+                  id="open-in-btn"
+                >
+                  <i class="fas fa-arrow-right"></i> Apri Ingresso
+                </button>
+              </div>
+            </div>
+
+            <div class="control-card">
+              <div class="control-header">
+                <h4><i class="fas fa-arrow-left"></i> Apertura Uscita</h4>
+                <p>Consente l'uscita di una persona</p>
+              </div>
+              <div class="control-body">
+                <div class="duration-selector">
+                  <label for="out-duration">Durata apertura (secondi):</label>
+                  <div class="duration-controls">
+                    <button
+                      onclick="changeDuration('out', -1)"
+                      class="btn btn-sm"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      id="out-duration"
+                      value="3"
+                      min="1"
+                      max="10"
+                    />
+                    <button
+                      onclick="changeDuration('out', 1)"
+                      class="btn btn-sm"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onclick="openGate('out')"
+                  class="btn btn-warning btn-large"
+                  id="open-out-btn"
+                >
+                  <i class="fas fa-arrow-left"></i> Apri Uscita
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Emergency Controls -->
+          <div class="emergency-section" id="emergency-section">
+            <h4>
+              <i class="fas fa-exclamation-triangle"></i> Controlli di Emergenza
+            </h4>
+            <div class="emergency-controls">
+              <button onclick="emergencyOpen()" class="btn btn-danger">
+                <i class="fas fa-unlock"></i> Apertura di Emergenza
+              </button>
+              <button onclick="emergencyLock()" class="btn btn-dark">
+                <i class="fas fa-lock"></i> Blocco di Emergenza
+              </button>
+            </div>
+            <p class="emergency-warning">
+              <i class="fas fa-warning"></i> I controlli di emergenza richiedono
+              privilegi amministratore
+            </p>
+          </div>
+        </div>
+
+        <!-- Recent Manual Commands -->
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="fas fa-history"></i> Comandi Recenti</h3>
+            <button onclick="refreshCommands()" class="btn btn-sm">
+              <i class="fas fa-sync"></i> Aggiorna
+            </button>
+          </div>
+          <div class="card-content">
+            <div class="commands-list" id="commands-list">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+
+        <!-- System Shortcuts -->
+        <div class="shortcuts-section">
+          <h3><i class="fas fa-bolt"></i> Scorciatoie Sistema</h3>
+          <div class="shortcuts-grid">
+            <button onclick="testGate()" class="btn btn-info">
+              <i class="fas fa-vial"></i> Test Tornello
+            </button>
+            <button onclick="calibrateReaders()" class="btn btn-secondary">
+              <i class="fas fa-bullseye"></i> Calibra Lettori
+            </button>
+            <button onclick="resetSystem()" class="btn btn-warning">
+              <i class="fas fa-redo"></i> Reset Sistema
+            </button>
+            <button onclick="viewDiagnostics()" class="btn btn-info">
+              <i class="fas fa-stethoscope"></i> Diagnostica
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="confirm-title">Conferma Azione</h3>
+          <button onclick="closeModal()" class="btn btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <p id="confirm-message">Sei sicuro di voler procedere?</p>
+        </div>
+        <div class="modal-footer">
+          <button onclick="closeModal()" class="btn btn-secondary">
+            Annulla
+          </button>
+          <button
+            onclick="confirmAction()"
+            class="btn btn-primary"
+            id="confirm-btn"
+          >
+            Conferma
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+    <script>
+      let pendingAction = null;
+
+      // Initialize control page
+      document.addEventListener("DOMContentLoaded", function () {
+        initControlPage();
+      });
+
+      function initControlPage() {
+        loadGateStatus();
+        loadRecentCommands();
+        checkPermissions();
+      }
+
+      async function loadGateStatus() {
+        try {
+          const response = await authorizedFetch("/api/control/status");
+          const data = await response.json();
+
+          updateGateStatus(data.gate);
+          updatePermissions(data.permissions);
+        } catch (error) {
+          console.error("Error loading gate status:", error);
+          showToast("Errore nel caricamento stato tornello", "error");
+        }
+      }
+
+      function updateGateStatus(gate) {
+        document.getElementById("gate-position").textContent =
+          gate.position === "closed" ? "Chiusa" : "Aperta";
+        document.getElementById("gate-locked").textContent = gate.locked
+          ? "Sì"
+          : "No";
+        document.getElementById("last-action").textContent =
+          gate.last_action || "N/A";
+
+        const statusElement = document.getElementById("gate-status");
+        const statusText = statusElement.querySelector(".status-text");
+        const statusIndicator =
+          statusElement.querySelector(".status-indicator");
+
+        if (gate.position === "closed") {
+          statusText.textContent = "Chiuso";
+          statusIndicator.className = "status-indicator closed";
+        } else {
+          statusText.textContent = "Aperto";
+          statusIndicator.className = "status-indicator open";
+        }
+      }
+
+      function updatePermissions(permissions) {
+        const emergencySection = document.getElementById("emergency-section");
+
+        if (!permissions.can_emergency_open) {
+          emergencySection.style.opacity = "0.5";
+          emergencySection.querySelectorAll("button").forEach((btn) => {
+            btn.disabled = true;
+          });
+        }
+      }
+
+      function changeDuration(direction, delta) {
+        const input = document.getElementById(`${direction}-duration`);
+        const newValue = parseInt(input.value) + delta;
+
+        if (newValue >= 1 && newValue <= 10) {
+          input.value = newValue;
+        }
+      }
+
+      async function openGate(direction) {
+        const duration = parseInt(
+          document.getElementById(`${direction}-duration`).value
+        );
+        const button = document.getElementById(`open-${direction}-btn`);
+
+        // Confirm action
+        const confirmed = await showConfirmModal(
+          "Conferma Apertura",
+          `Aprire il tornello in direzione ${
+            direction === "in" ? "ingresso" : "uscita"
+          } per ${duration} secondi?`
+        );
+
+        if (!confirmed) return;
+
+        // Show loading
+        button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Apertura...`;
+        button.disabled = true;
+
+        try {
+          const response = await authorizedFetch("/api/control/open", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ direction, duration }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            showToast(data.message, "success");
+            loadGateStatus();
+            loadRecentCommands();
+          } else {
+            showToast(data.detail || "Errore durante l'apertura", "error");
+          }
+        } catch (error) {
+          console.error("Error opening gate:", error);
+          showToast("Errore di connessione", "error");
+        } finally {
+          // Restore button
+          button.innerHTML = `<i class="fas fa-arrow-${
+            direction === "in" ? "right" : "left"
+          }"></i> Apri ${direction === "in" ? "Ingresso" : "Uscita"}`;
+          button.disabled = false;
+        }
+      }
+
+      async function emergencyOpen() {
+        const confirmed = await showConfirmModal(
+          "APERTURA DI EMERGENZA",
+          "ATTENZIONE: Questo comando aprirà il tornello immediatamente. Continuare?"
+        );
+
+        if (!confirmed) return;
+
+        showToast("Apertura di emergenza attivata", "warning");
+        // Implement emergency open logic
+      }
+
+      async function emergencyLock() {
+        const confirmed = await showConfirmModal(
+          "BLOCCO DI EMERGENZA",
+          "ATTENZIONE: Questo comando bloccherà completamente il tornello. Continuare?"
+        );
+
+        if (!confirmed) return;
+
+        showToast("Blocco di emergenza attivato", "error");
+        // Implement emergency lock logic
+      }
+
+      function loadRecentCommands() {
+        // Mock data for now
+        const commands = [
+          {
+            time: "14:30:22",
+            user: "admin",
+            action: "Apertura ingresso",
+            duration: "3s",
+            status: "successo",
+          },
+          {
+            time: "14:28:15",
+            user: "admin",
+            action: "Apertura uscita",
+            duration: "2s",
+            status: "successo",
+          },
+          {
+            time: "14:25:08",
+            user: "admin",
+            action: "Test tornello",
+            duration: "-",
+            status: "successo",
+          },
+        ];
+
+        const commandsList = document.getElementById("commands-list");
+        commandsList.innerHTML = commands
+          .map(
+            (cmd) => `
+                <div class="command-item">
+                    <div class="command-info">
+                        <span class="command-time">${cmd.time}</span>
+                        <span class="command-user">${cmd.user}</span>
+                        <span class="command-action">${cmd.action}</span>
+                        <span class="command-duration">${cmd.duration}</span>
+                    </div>
+                    <span class="command-status ${cmd.status}">${cmd.status}</span>
+                </div>
+            `
+          )
+          .join("");
+      }
+
+      function refreshCommands() {
+        loadRecentCommands();
+        showToast("Comandi aggiornati", "info");
+      }
+
+      function checkPermissions() {
+        // Check user permissions and update UI accordingly
+      }
+
+      // Modal functions
+      function showConfirmModal(title, message) {
+        return new Promise((resolve) => {
+          document.getElementById("confirm-title").textContent = title;
+          document.getElementById("confirm-message").textContent = message;
+          document.getElementById("confirm-modal").style.display = "flex";
+
+          pendingAction = resolve;
+        });
+      }
+
+      function closeModal() {
+        document.getElementById("confirm-modal").style.display = "none";
+        if (pendingAction) {
+          pendingAction(false);
+          pendingAction = null;
+        }
+      }
+
+      function confirmAction() {
+        document.getElementById("confirm-modal").style.display = "none";
+        if (pendingAction) {
+          pendingAction(true);
+          pendingAction = null;
+        }
+      }
+
+      // Shortcut functions
+      function testGate() {
+        showToast("Test tornello avviato", "info");
+      }
+
+      function calibrateReaders() {
+        showToast("Calibrazione lettori avviata", "info");
+      }
+
+      function resetSystem() {
+        showConfirmModal(
+          "Reset Sistema",
+          "Riavviare il sistema RFID Gate?"
+        ).then((confirmed) => {
+          if (confirmed) {
+            showToast("Sistema in riavvio...", "warning");
+          }
+        });
+      }
+
+      function viewDiagnostics() {
+        window.open("/api/docs", "_blank");
+      }
+    </script>
+  </body>
+</html>

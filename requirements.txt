@@ -49,6 +49,20 @@ pytest>=7.0.0
 mock>=4.0.3
 
 # ===========================================
+# 🌐 WEB UI (Optional)
+# ===========================================
+# Uncomment for Web UI support
+# fastapi>=0.104.1
+# uvicorn[standard]>=0.24.0
+# jinja2>=3.1.2
+# python-jose[cryptography]>=3.3.0
+# passlib[bcrypt]>=1.7.4
+# python-multipart>=0.0.6
+# websockets>=11.0.3
+# aiofiles>=23.2.1
+# sqlalchemy>=2.0.0
+
+# ===========================================
 # 📝 NOTES & COMPATIBILITÀ
 # ===========================================
 # - MFRC522: Lettore RFID esistente tramite SPI

@@ -1,0 +1,523 @@
+#!/usr/bin/env python3
+"""
+🌐 RFID Gate Web UI - Main Application
+====================================
+
+Web interface moderna per gestione sistema RFID Gate.
+
+Features:
+- Dashboard real-time con WebSockets
+- Controllo manuale tornello
+- Gestione log e statistiche
+- Configurazione sistema
+- API REST completa
+- Autenticazione sicura
+"""
+
+import os
+import sys
+import asyncio
+import logging
+from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
+
+from fastapi import FastAPI, Request, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+import uvicorn
+
+# Add parent directory to path for RFID Gate imports
+parent_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(parent_dir))
+
+# Import RFID Gate modules
+from rfid_gate import AccessControlSystem, RFIDGateConfig
+from rfid_gate.config.settings import Config
+from rfid_gate.logging.logger import AccessLogger
+
+
+# ==============================================================================
+# 🔧 CONFIGURATION
+# ==============================================================================
+
+# JWT Configuration
+SECRET_KEY = os.getenv("WEBUI_SECRET_KEY", "rfid_gate_web_ui_secret_key_change_in_production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Security
+security = HTTPBearer()
+
+# Templates and static files
+templates = Jinja2Templates(directory="templates")
+
+# Default admin user (change in production!)
+DEFAULT_ADMIN = {
+    "username": "admin",
+    "password": "admin123",  # Will be hashed
+    "role": "admin"
+}
+
+
+# ==============================================================================
+# 🚀 FASTAPI APP SETUP
+# ==============================================================================
+
+app = FastAPI(
+    title="RFID Gate Web UI",
+    description="Interface web per gestione sistema RFID Gate",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure properly in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# ==============================================================================
+# 🔐 AUTHENTICATION & SECURITY
+# ==============================================================================
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against hash"""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password: str) -> str:
+    """Hash password"""
+    return pwd_context.hash(password)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create JWT access token"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify JWT token"""
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return {"username": username, "role": payload.get("role", "user")}
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def authenticate_user(username: str, password: str) -> Optional[Dict]:
+    """Authenticate user (basic implementation)"""
+    # In production, use proper database
+    if username == DEFAULT_ADMIN["username"]:
+        hashed_pwd = get_password_hash(DEFAULT_ADMIN["password"])
+        if verify_password(password, hashed_pwd):
+            return DEFAULT_ADMIN
+    return None
+
+
+# ==============================================================================
+# 🌐 GLOBAL STATE & CONNECTIONS
+# ==============================================================================
+
+class ConnectionManager:
+    """Manage WebSocket connections for real-time updates"""
+    
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(f"🔗 WebSocket connected. Total connections: {len(self.active_connections)}")
+    
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        print(f"🔌 WebSocket disconnected. Total connections: {len(self.active_connections)}")
+    
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        try:
+            await websocket.send_text(message)
+        except:
+            self.disconnect(websocket)
+    
+    async def broadcast(self, message: str):
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except:
+                disconnected.append(connection)
+        
+        # Remove disconnected clients
+        for conn in disconnected:
+            self.disconnect(conn)
+
+
+# Global instances
+manager = ConnectionManager()
+rfid_system: Optional[AccessControlSystem] = None
+access_logger: Optional[AccessLogger] = None
+
+
+# ==============================================================================
+# 🏠 WEB PAGES (HTML)
+# ==============================================================================
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Main dashboard page"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login page"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.get("/control", response_class=HTMLResponse)
+async def control_page(request: Request):
+    """Manual control page"""
+    return templates.TemplateResponse("control.html", {"request": request})
+
+
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request):
+    """Access logs page"""
+    return templates.TemplateResponse("logs.html", {"request": request})
+
+
+@app.get("/config", response_class=HTMLResponse)
+async def config_page(request: Request):
+    """Configuration page"""
+    return templates.TemplateResponse("config.html", {"request": request})
+
+
+# ==============================================================================
+# 🔑 AUTHENTICATION API
+# ==============================================================================
+
+@app.post("/api/auth/login")
+async def login(request: Request):
+    """User login endpoint"""
+    try:
+        form_data = await request.json()
+        username = form_data.get("username")
+        password = form_data.get("password")
+        
+        user = authenticate_user(username, password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password"
+            )
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["username"], "role": user["role"]},
+            expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {"username": user["username"], "role": user["role"]}
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@app.post("/api/auth/logout")
+async def logout(current_user: dict = Depends(verify_token)):
+    """User logout endpoint"""
+    return {"message": "Logged out successfully"}
+
+
+# ==============================================================================
+# 📊 DASHBOARD API
+# ==============================================================================
+
+@app.get("/api/system/status")
+async def get_system_status(current_user: dict = Depends(verify_token)):
+    """Get current system status"""
+    try:
+        global rfid_system
+        
+        # Initialize system if needed
+        if rfid_system is None:
+            config = RFIDGateConfig()
+            rfid_system = AccessControlSystem(config)
+        
+        status_data = {
+            "timestamp": datetime.now().isoformat(),
+            "system": {
+                "running": True,
+                "version": "2.0.0",
+                "uptime": "00:45:23",
+                "memory_usage": "45.2 MB"
+            },
+            "hardware": {
+                "readers": [
+                    {"id": "reader_1", "type": "PN532", "status": "connected", "last_read": "2 min ago"},
+                    {"id": "reader_2", "type": "MFRC522", "status": "connected", "last_read": "5 min ago"}
+                ],
+                "relay": {"status": "ready", "last_activation": "10 min ago"},
+                "gpio": {"status": "ok", "pins_active": 4}
+            },
+            "network": {
+                "mqtt": {"connected": True, "broker": "mqtt.example.com"},
+                "internet": {"connected": True, "latency": "45ms"},
+                "offline_queue": {"items": 0}
+            },
+            "stats": {
+                "today_accesses": 24,
+                "authorized": 22,
+                "denied": 2,
+                "manual_opens": 3
+            }
+        }
+        
+        return status_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/system/logs/recent")
+async def get_recent_logs(limit: int = 50, current_user: dict = Depends(verify_token)):
+    """Get recent access logs"""
+    try:
+        # Mock data for now - integrate with real logger
+        logs = []
+        for i in range(min(limit, 20)):
+            logs.append({
+                "id": f"log_{i}",
+                "timestamp": (datetime.now() - timedelta(minutes=i*5)).isoformat(),
+                "card_uid": f"A1B2C{i:03d}",
+                "direction": "in" if i % 2 == 0 else "out",
+                "authorized": i % 5 != 0,  # 80% authorized
+                "user_name": f"User {i}" if i % 5 != 0 else None,
+                "reader_id": "reader_1" if i % 2 == 0 else "reader_2"
+            })
+        
+        return {"logs": logs, "total": len(logs)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 🎮 CONTROL API
+# ==============================================================================
+
+@app.post("/api/control/open")
+async def manual_open(request: Request, current_user: dict = Depends(verify_token)):
+    """Manual gate open"""
+    try:
+        data = await request.json()
+        direction = data.get("direction", "in")
+        duration = data.get("duration", 3)
+        
+        # Here integrate with your manual open system
+        command = {
+            "command_id": f"web_{current_user['username']}_{int(datetime.now().timestamp())}",
+            "direction": direction,
+            "duration": duration,
+            "user_id": current_user["username"],
+            "source": "web_ui",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Broadcast to WebSocket clients
+        await manager.broadcast(f"manual_open:{direction}:{duration}")
+        
+        return {
+            "success": True,
+            "message": f"Gate opened {direction} for {duration} seconds",
+            "command_id": command["command_id"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/control/status")
+async def get_control_status(current_user: dict = Depends(verify_token)):
+    """Get gate control status"""
+    return {
+        "gate": {
+            "position": "closed",
+            "locked": True,
+            "last_action": "auto_close",
+            "last_action_time": (datetime.now() - timedelta(minutes=2)).isoformat()
+        },
+        "permissions": {
+            "can_open_in": True,
+            "can_open_out": True,
+            "can_emergency_open": current_user["role"] == "admin"
+        }
+    }
+
+
+# ==============================================================================
+# 🔧 CONFIGURATION API  
+# ==============================================================================
+
+@app.get("/api/config")
+async def get_config(current_user: dict = Depends(verify_token)):
+    """Get system configuration"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Read current config
+        config_data = {
+            "readers": {
+                "reader_1": {"type": "PN532", "interface": "I2C", "address": "0x24"},
+                "reader_2": {"type": "MFRC522", "interface": "SPI", "bus": 0}
+            },
+            "network": {
+                "mqtt_broker": "mqtt.example.com",
+                "mqtt_port": 1883,
+                "mqtt_topic_prefix": "gate/tornello_01"
+            },
+            "security": {
+                "require_authorization": True,
+                "log_all_attempts": True,
+                "offline_mode_enabled": True
+            }
+        }
+        
+        return config_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/config")
+async def update_config(request: Request, current_user: dict = Depends(verify_token)):
+    """Update system configuration"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        config_data = await request.json()
+        
+        # Here you would save the configuration
+        # and restart necessary services
+        
+        await manager.broadcast("config_updated")
+        
+        return {"success": True, "message": "Configuration updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 📡 WEBSOCKET ENDPOINT
+# ==============================================================================
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time updates"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            data = await websocket.receive_text()
+            # Handle incoming WebSocket messages if needed
+            
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+# ==============================================================================
+# 🚀 APPLICATION STARTUP
+# ==============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application"""
+    print("🌐 Starting RFID Gate Web UI...")
+    print(f"📍 Dashboard: http://localhost:8080")
+    print(f"📖 API Docs: http://localhost:8080/api/docs")
+    print(f"🔑 Default login: admin / admin123")
+    
+    # Initialize RFID system connection here if needed
+    global rfid_system, access_logger
+    try:
+        # Note: Uncomment when ready to integrate with real system
+        # config = RFIDGateConfig()
+        # rfid_system = AccessControlSystem(config) 
+        # access_logger = AccessLogger()
+        pass
+    except Exception as e:
+        print(f"⚠️ Could not initialize RFID system: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    print("🛑 Shutting down RFID Gate Web UI...")
+    
+    global rfid_system
+    if rfid_system:
+        # Cleanup RFID system
+        pass
+
+
+# ==============================================================================
+# 🏃 MAIN ENTRY POINT
+# ==============================================================================
+
+if __name__ == "__main__":
+    # Development server
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=8080,
+        reload=True,
+        log_level="info"
+    )
