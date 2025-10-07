@@ -62,14 +62,30 @@ else
     SERVICE_WAS_RUNNING=false
 fi
 
-# Aggiorna file sorgente
-echo -e "${YELLOW}📋 Aggiornamento file sorgente...${NC}"
+# Aggiorna file sorgente - ARCHITETTURA REFACTORIZZATA
+echo -e "${YELLOW}📋 Aggiornamento architettura modulare...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Aggiorna src/
-if [ -d "$SCRIPT_DIR/src" ]; then
-    cp -r "$SCRIPT_DIR/src"/* "$PROJECT_DIR/src/"
-    echo -e "${GREEN}✅ File sorgente aggiornati${NC}"
+# Aggiorna rfid_gate/ (nuova architettura modulare)
+if [ -d "$SCRIPT_DIR/rfid_gate" ]; then
+    if [ -d "$PROJECT_DIR/rfid_gate" ]; then
+        rm -rf "$PROJECT_DIR/rfid_gate"
+    fi
+    cp -r "$SCRIPT_DIR/rfid_gate" "$PROJECT_DIR/"
+    echo -e "${GREEN}✅ Modulo rfid_gate aggiornato${NC}"
+fi
+
+# Aggiorna main.py (nuovo entry point)
+if [ -f "$SCRIPT_DIR/main.py" ]; then
+    cp "$SCRIPT_DIR/main.py" "$PROJECT_DIR/"
+    echo -e "${GREEN}✅ Main entry point aggiornato${NC}"
+fi
+
+# Rimuovi src/ obsoleto se esiste
+if [ -d "$PROJECT_DIR/src" ]; then
+    echo -e "${YELLOW}🗑️ Rimozione directory src/ obsoleta...${NC}"
+    rm -rf "$PROJECT_DIR/src"
+    echo -e "${GREEN}✅ Directory obsoleta rimossa${NC}"
 fi
 
 # Aggiorna tools/
@@ -183,14 +199,15 @@ if [ "$SERVICE_WAS_RUNNING" = true ]; then
     fi
 fi
 
-# Test rapido configurazione
+# Test rapido configurazione - ARCHITETTURA REFACTORIZZATA
 echo -e "${YELLOW}🧪 Test configurazione...${NC}"
 cd "$PROJECT_DIR"
-if sudo ./venv/bin/python -c "
+if sudo -u rfid ./venv/bin/python -c "
 import sys
-sys.path.insert(0, 'src')
+sys.path.insert(0, '.')
 try:
-    from config import Config
+    from rfid_gate.config.settings import RFIDGateConfig
+    config = RFIDGateConfig()
     print('✅ Configurazione OK')
 except Exception as e:
     print(f'❌ Errore: {e}')
@@ -198,7 +215,7 @@ except Exception as e:
 " 2>/dev/null; then
     echo -e "${GREEN}✅ Test configurazione OK${NC}"
 else
-    echo -e "${YELLOW}⚠️ Possibili problemi configurazione${NC}"
+    echo -e "${YELLOW}⚠️ Possibili problemi configurazione - Verifica manuale richiesta${NC}"
 fi
 
 echo -e "${GREEN}🎉 AGGIORNAMENTO COMPLETATO!${NC}"
