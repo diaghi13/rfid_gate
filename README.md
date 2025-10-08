@@ -8,6 +8,20 @@ Sistema di controllo accessi RFID moderno con architettura modulare.
 
 ## 🚀 Quick Start
 
+### **🎯 Installazione Automatica**
+
+```bash
+# Clona e installa con scelta interattiva
+git clone https://github.com/diaghi13/rfid_gate.git
+cd rfid_gate
+sudo bash scripts/install.sh
+
+# Opzioni disponibili:
+# 1️⃣ Sistema base (solo RFID Gate)
+# 2️⃣ Sistema completo (+ Web UI) [consigliato]
+# 3️⃣ Sistema avanzato (+ Nginx + SSL)
+```
+
 ### **Sistema Principale**
 
 ```bash

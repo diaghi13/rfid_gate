@@ -15,6 +15,112 @@ NC='\033[0m' # No Color
 PROJECT_DIR="/opt/rfid-gate"
 SERVICE_USER="rfid"
 
+# Funzione per configurazione Nginx
+setup_nginx_config() {
+    echo -e "${YELLOW}🔧 Configurazione Nginx...${NC}"
+    
+    # Richiedi dominio
+    read -p "Inserisci il dominio (es: rfid.example.com) [default: localhost]: " -r DOMAIN
+    DOMAIN=${DOMAIN:-localhost}
+    
+    # Crea configurazione Nginx
+    cat > /etc/nginx/sites-available/rfid-gate << EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    
+    # Redirect HTTP to HTTPS (se SSL configurato)
+    # return 301 https://\$server_name\$request_uri;
+    
+    # Per ora servi HTTP direttamente
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeout settings
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Static files per WebUI
+    location /static/ {
+        alias $PROJECT_DIR/webui/static/;
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # API endpoints
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+}
+EOF
+
+    # Abilita sito
+    ln -sf /etc/nginx/sites-available/rfid-gate /etc/nginx/sites-enabled/
+    
+    # Test configurazione Nginx
+    if nginx -t; then
+        echo -e "${GREEN}✅ Configurazione Nginx valida${NC}"
+        systemctl enable nginx
+        systemctl restart nginx
+        echo -e "${GREEN}✅ Nginx configurato e avviato${NC}"
+        
+        # Chiedi se configurare SSL
+        read -p "Configurare SSL con Let's Encrypt? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            setup_ssl_certificate "$DOMAIN"
+        fi
+    else
+        echo -e "${RED}❌ Errore configurazione Nginx${NC}"
+    fi
+}
+
+# Funzione per SSL certificate
+setup_ssl_certificate() {
+    local domain=$1
+    echo -e "${YELLOW}🔒 Configurazione certificato SSL...${NC}"
+    
+    if [ "$domain" != "localhost" ]; then
+        # Ottieni certificato Let's Encrypt
+        certbot --nginx -d "$domain" --non-interactive --agree-tos --email admin@"$domain"
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ Certificato SSL configurato${NC}"
+            
+            # Auto-renewal
+            systemctl enable certbot.timer
+            echo -e "${GREEN}✅ Auto-renewal SSL abilitato${NC}"
+        else
+            echo -e "${RED}❌ Errore configurazione SSL${NC}"
+            echo -e "${YELLOW}💡 Verifica che il dominio punti a questo server${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️ SSL non configurabile per localhost${NC}"
+    fi
+}
+
 echo -e "${BLUE}🚀 INSTALLAZIONE RFID GATE SYSTEM${NC}"
 echo "================================="
 
@@ -24,6 +130,39 @@ if [ "$EUID" -ne 0 ]; then
     echo "💡 Usa: sudo bash scripts/install.sh"
     exit 1
 fi
+
+# Scelta tipo installazione
+echo -e "${YELLOW}🎯 Tipo di installazione:${NC}"
+echo "1. 📡 Sistema base (solo RFID Gate)"
+echo "2. 🌐 Sistema completo (RFID Gate + Web UI)"
+echo "3. 🔧 Sistema avanzato (+ Nginx reverse proxy)"
+echo
+
+read -p "Scegli opzione (1-3) [default: 2]: " -r INSTALL_TYPE
+INSTALL_TYPE=${INSTALL_TYPE:-2}
+
+case $INSTALL_TYPE in
+    1)
+        INSTALL_WEBUI=false
+        INSTALL_NGINX=false
+        echo -e "${BLUE}📡 Installazione sistema base selezionata${NC}"
+        ;;
+    2)
+        INSTALL_WEBUI=true
+        INSTALL_NGINX=false
+        echo -e "${BLUE}🌐 Installazione completa selezionata${NC}"
+        ;;
+    3)
+        INSTALL_WEBUI=true
+        INSTALL_NGINX=true
+        echo -e "${BLUE}🔧 Installazione avanzata selezionata${NC}"
+        ;;
+    *)
+        echo -e "${RED}❌ Opzione non valida, usando default (completa)${NC}"
+        INSTALL_WEBUI=true
+        INSTALL_NGINX=false
+        ;;
+esac
 
 echo -e "${YELLOW}📋 Controllo sistema...${NC}"
 
@@ -44,10 +183,17 @@ apt upgrade -y -qq
 
 # Installazione dipendenze sistema
 echo -e "${YELLOW}📦 Installazione dipendenze sistema...${NC}"
-apt install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
+
+# Dipendenze base
+DEPS="python3 python3-pip python3-venv"
+
+# Aggiungi Nginx se richiesto
+if [ "$INSTALL_NGINX" = true ]; then
+    DEPS="$DEPS nginx certbot python3-certbot-nginx"
+    echo -e "${YELLOW}🔧 Nginx e SSL saranno installati${NC}"
+fi
+
+apt install -y $DEPS \
     python3-dev \
     python3-rpi.gpio \
     git \
@@ -122,6 +268,18 @@ else
     exit 1
 fi
 
+# Copia directory WebUI (se richiesta)
+if [ "$INSTALL_WEBUI" = true ]; then
+    echo -e "${YELLOW}🌐 Installazione Web UI...${NC}"
+    if [ -d "$SCRIPT_DIR/webui" ]; then
+        cp -r "$SCRIPT_DIR/webui" "$PROJECT_DIR/"
+        echo -e "${GREEN}✅ Copiato directory webui${NC}"
+    else
+        echo -e "${RED}❌ Directory webui non trovata${NC}"
+        exit 1
+    fi
+fi
+
 # Copia file tools
 echo -e "${YELLOW}📋 Copia file tools...${NC}"
 TOOL_FILES=(
@@ -190,6 +348,17 @@ sudo -u "$SERVICE_USER" ./venv/bin/pip install -r requirements.txt
 echo -e "${YELLOW}📡 Installazione dipendenze RFID...${NC}"
 sudo -u "$SERVICE_USER" ./venv/bin/pip install spidev
 sudo -u "$SERVICE_USER" ./venv/bin/pip install RPi.GPIO
+
+# Installa dipendenze Web UI (se richiesta)
+if [ "$INSTALL_WEBUI" = true ]; then
+    echo -e "${YELLOW}🌐 Installazione dipendenze Web UI...${NC}"
+    sudo -u "$SERVICE_USER" ./venv/bin/pip install fastapi uvicorn[standard] python-multipart jinja2
+    sudo -u "$SERVICE_USER" ./venv/bin/pip install python-jose[cryptography] passlib[bcrypt] aiofiles websockets
+    
+    # Gunicorn per produzione
+    sudo -u "$SERVICE_USER" ./venv/bin/pip install gunicorn
+    echo -e "${GREEN}✅ Dipendenze Web UI installate${NC}"
+fi
 
 # Verifica e installa mfrc522 da source se necessario
 if ! sudo -u "$SERVICE_USER" ./venv/bin/python -c "import mfrc522" 2>/dev/null; then
@@ -348,6 +517,12 @@ $PROJECT_DIR/logs/*.csv {
 }
 EOF
 
+# Configurazione Nginx (se richiesta)
+if [ "$INSTALL_NGINX" = true ]; then
+    echo -e "${YELLOW}🔧 Configurazione Nginx reverse proxy...${NC}"
+    setup_nginx_config
+fi
+
 # Ricarica systemd
 systemctl daemon-reload
 
@@ -415,11 +590,26 @@ echo "3. Abilita e avvia servizio:"
 echo "   sudo systemctl enable rfid-gate"
 echo "   sudo systemctl start rfid-gate"
 echo
-echo "4. Monitora stato:"
+if [ "$INSTALL_WEBUI" = true ]; then
+    echo "4. 🌐 Setup Web UI:"
+    echo "   sudo bash $PROJECT_DIR/scripts/setup_webui_service.sh install"
+    if [ "$INSTALL_NGINX" = true ]; then
+        echo "   # Accedi tramite Nginx: http://$DOMAIN"
+        echo "   # Diretto: http://localhost:8080"
+    else
+        echo "   # Accedi a: http://localhost:8080"
+    fi
+else
+    echo "4. 🌐 Setup Web UI (manuale se necessario):"
+    echo "   sudo bash $PROJECT_DIR/scripts/setup_webui_service.sh install"
+fi
+echo
+echo "5. Monitora stato:"
 echo "   sudo systemctl status rfid-gate"
+echo "   sudo systemctl status rfid-gate-webui  # Se WebUI installata"
 echo "   sudo journalctl -fu rfid-gate"
 echo
-echo "5. Tool di gestione:"
+echo "6. Tool di gestione:"
 echo "   sudo python3 $PROJECT_DIR/tools/offline_utils.py --status"
 echo "   sudo python3 $PROJECT_DIR/tools/manual_open_tool.py --test"
 echo "   sudo python3 $PROJECT_DIR/tools/log_viewer.py --stats"

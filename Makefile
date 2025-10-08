@@ -23,6 +23,28 @@ test:
 	@echo "$(BLUE)🧪 Running all tests...$(NC)"
 	@$(PYTHON) $(TEST_DIR)/test_runner.py
 
+## WebUI Commands
+
+# Avvia server WebUI demo
+webui-demo:
+	@echo "$(BLUE)🌐 Starting WebUI demo server...$(NC)"
+	@cd webui && $(PYTHON) simple_server.py
+
+# Avvia server WebUI completo
+webui-server:
+	@echo "$(BLUE)🚀 Starting WebUI FastAPI server...$(NC)"
+	@cd webui && $(PYTHON) app_demo.py
+
+# Test configurazione WebUI
+webui-test:
+	@echo "$(BLUE)🧪 Testing WebUI configuration...$(NC)"
+	@cd webui && $(PYTHON) -c "from config_manager import ConfigManager; cm = ConfigManager(); print('✅ ConfigManager OK')"
+
+# Installa dipendenze WebUI
+webui-deps:
+	@echo "$(BLUE)📦 Installing WebUI dependencies...$(NC)"
+	@pip install fastapi uvicorn[standard] python-multipart jinja2 python-jose[cryptography] passlib[bcrypt] aiofiles
+
 # Esegue solo unit tests
 test-unit:
 	@echo "$(BLUE)🔬 Running unit tests...$(NC)"
