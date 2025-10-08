@@ -45,6 +45,52 @@
       <main class="main">
         <!-- Configuration Form -->
         <form id="config-form">
+          <!-- System Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-cogs"></i> Configurazione Sistema</h3>
+            </div>
+            <div class="card-content">
+              <div class="config-section">
+                <h4>Identificazione Tornello</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="tornello-id">ID Tornello:</label>
+                    <input
+                      type="text"
+                      id="tornello-id"
+                      name="tornello_id"
+                      class="form-control"
+                      value="tornello_01"
+                      placeholder="es. tornello_01"
+                    />
+                    <small class="help-text">
+                      Identificativo univoco del tornello nel sistema MQTT
+                    </small>
+                  </div>
+                  <div class="form-group">
+                    <label for="bidirectional-mode">Modalità Bidirezionale:</label>
+                    <div class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        id="bidirectional-mode"
+                        name="bidirectional_mode"
+                        checked
+                      />
+                      <label for="bidirectional-mode" class="toggle-label">
+                        <span class="toggle-inner"></span>
+                        <span class="toggle-switch-handle"></span>
+                      </label>
+                    </div>
+                    <small class="help-text">
+                      Abilita controllo accessi bidirezionale (entrata/uscita)
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Readers Configuration -->
           <div class="card">
             <div class="card-header">
@@ -552,44 +598,53 @@
       }
 
       function populateForm(config) {
-        // Readers configuration
-        if (config.readers) {
-          if (config.readers.reader_1) {
-            document.getElementById("reader1-type").value =
-              config.readers.reader_1.type || "PN532";
-            document.getElementById("reader1-interface").value =
-              config.readers.reader_1.interface || "I2C";
-            document.getElementById("reader1-address").value =
-              config.readers.reader_1.address || "0x24";
-          }
-          if (config.readers.reader_2) {
-            document.getElementById("reader2-type").value =
-              config.readers.reader_2.type || "MFRC522";
-            document.getElementById("reader2-interface").value =
-              config.readers.reader_2.interface || "SPI";
-            document.getElementById("reader2-address").value =
-              config.readers.reader_2.bus || "0";
-          }
+        // System configuration
+        if (config.data) {
+          document.getElementById("tornello-id").value =
+            config.data.TORNELLO_ID || "tornello_01";
+          document.getElementById("bidirectional-mode").checked =
+            config.data.BIDIRECTIONAL_MODE === "True" || config.data.BIDIRECTIONAL_MODE === "true";
         }
 
-        // Network configuration
-        if (config.network) {
+        // Readers configuration - use .env variable names
+        if (config.data) {
+          // Reader 1 (IN)
+          document.getElementById("reader1-type").value =
+            config.data.RFID_IN_READER_TYPE || "pn532";
+          document.getElementById("reader1-interface").value =
+            config.data.RFID_IN_PN532_INTERFACE || "i2c";
+          document.getElementById("reader1-address").value =
+            config.data.RFID_IN_PN532_I2C_ADDRESS || "0x24";
+          document.getElementById("reader1-enabled").checked =
+            config.data.ENABLE_IN_READER === "True";
+
+          // Reader 2 (OUT)  
+          document.getElementById("reader2-type").value =
+            config.data.RFID_OUT_READER_TYPE || "pn532";
+          document.getElementById("reader2-interface").value =
+            config.data.RFID_OUT_PN532_INTERFACE || "spi";
+          document.getElementById("reader2-address").value =
+            config.data.RFID_OUT_PN532_SPI_BUS || "0";
+          document.getElementById("reader2-enabled").checked =
+            config.data.ENABLE_OUT_READER === "True";
+
+          // Network configuration
           document.getElementById("mqtt-broker").value =
-            config.network.mqtt_broker || "";
+            config.data.MQTT_BROKER || "";
           document.getElementById("mqtt-port").value =
-            config.network.mqtt_port || 1883;
-          document.getElementById("mqtt-topic-prefix").value =
-            config.network.mqtt_topic_prefix || "";
-        }
+            config.data.MQTT_PORT || 1883;
+          document.getElementById("mqtt-username").value =
+            config.data.MQTT_USERNAME || "";
+          document.getElementById("mqtt-password").value =
+            config.data.MQTT_PASSWORD || "";
+          document.getElementById("mqtt-enabled").checked =
+            config.data.MQTT_USE_TLS === "True";
 
-        // Security configuration
-        if (config.security) {
+          // Security configuration
           document.getElementById("require-auth").checked =
-            config.security.require_authorization !== false;
-          document.getElementById("log-all-attempts").checked =
-            config.security.log_all_attempts !== false;
+            config.data.AUTH_ENABLED === "True";
           document.getElementById("offline-mode").checked =
-            config.security.offline_mode_enabled !== false;
+            config.data.OFFLINE_MODE_ENABLED === "True";
         }
       }
 
@@ -599,46 +654,32 @@
         const formData = new FormData(event.target);
         const config = {};
 
-        // Build config object from form data
-        config.readers = {
-          reader_1: {
-            type: formData.get("reader1_type"),
-            interface: formData.get("reader1_interface"),
-            address: formData.get("reader1_address"),
-            enabled: formData.has("reader1_enabled"),
-          },
-          reader_2: {
-            type: formData.get("reader2_type"),
-            interface: formData.get("reader2_interface"),
-            address: formData.get("reader2_address"),
-            enabled: formData.has("reader2_enabled"),
-          },
-        };
+        // System configuration - map to .env variables
+        config.TORNELLO_ID = formData.get("tornello_id");
+        config.BIDIRECTIONAL_MODE = formData.has("bidirectional_mode") ? "True" : "False";
 
-        config.network = {
-          mqtt_broker: formData.get("mqtt_broker"),
-          mqtt_port: parseInt(formData.get("mqtt_port")),
-          mqtt_username: formData.get("mqtt_username"),
-          mqtt_password: formData.get("mqtt_password"),
-          mqtt_topic_prefix: formData.get("mqtt_topic_prefix"),
-          mqtt_enabled: formData.has("mqtt_enabled"),
-        };
+        // Build config object from form data using actual .env variable names
+        // Readers configuration  
+        config.RFID_IN_READER_TYPE = formData.get("reader1_type");
+        config.RFID_IN_PN532_INTERFACE = formData.get("reader1_interface");
+        config.RFID_IN_PN532_I2C_ADDRESS = formData.get("reader1_address");
+        config.ENABLE_IN_READER = formData.has("reader1_enabled") ? "True" : "False";
+        
+        config.RFID_OUT_READER_TYPE = formData.get("reader2_type");
+        config.RFID_OUT_PN532_INTERFACE = formData.get("reader2_interface");
+        config.RFID_OUT_PN532_I2C_ADDRESS = formData.get("reader2_address");
+        config.ENABLE_OUT_READER = formData.has("reader2_enabled") ? "True" : "False";
 
-        config.security = {
-          require_authorization: formData.has("require_authorization"),
-          log_all_attempts: formData.has("log_all_attempts"),
-          offline_mode_enabled: formData.has("offline_mode_enabled"),
-          auto_lock_timeout: parseInt(formData.get("auto_lock_timeout")),
-        };
+        // Network configuration
+        config.MQTT_BROKER = formData.get("mqtt_broker");
+        config.MQTT_PORT = formData.get("mqtt_port");
+        config.MQTT_USERNAME = formData.get("mqtt_username");
+        config.MQTT_PASSWORD = formData.get("mqtt_password");
+        config.MQTT_USE_TLS = formData.has("mqtt_enabled") ? "True" : "False";
 
-        config.system = {
-          gate_open_duration: parseInt(formData.get("gate_open_duration")),
-          read_timeout: parseInt(formData.get("read_timeout")),
-          relay_pin: parseInt(formData.get("relay_pin")),
-          debug_mode: formData.has("debug_mode"),
-          auto_restart: formData.has("auto_restart"),
-          log_retention_days: parseInt(formData.get("log_retention_days")),
-        };
+        // Security configuration  
+        config.AUTH_ENABLED = formData.has("require_authorization") ? "True" : "False";
+        config.OFFLINE_MODE_ENABLED = formData.has("offline_mode_enabled") ? "True" : "False";
 
         showLoading();
 
