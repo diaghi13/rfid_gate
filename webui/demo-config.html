@@ -301,7 +301,47 @@
               <h3><i class="fas fa-cogs"></i> Configurazione Sistema</h3>
             </div>
             <div class="card-content">
-              <div class="form-grid">
+              <div class="config-section">
+                <h4>Identificazione Tornello</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="tornello-id">ID Tornello:</label>
+                    <input
+                      type="text"
+                      id="tornello-id"
+                      name="tornello_id"
+                      class="form-control"
+                      value="tornello_01"
+                      placeholder="es. tornello_01"
+                    />
+                    <small class="help-text">
+                      Identificativo univoco del tornello nel sistema MQTT
+                    </small>
+                  </div>
+                  <div class="form-group">
+                    <label for="bidirectional-mode">Modalità Bidirezionale:</label>
+                    <div class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        id="bidirectional-mode"
+                        name="bidirectional_mode"
+                        checked
+                      />
+                      <label for="bidirectional-mode" class="toggle-label">
+                        <span class="toggle-inner"></span>
+                        <span class="toggle-switch-handle"></span>
+                      </label>
+                    </div>
+                    <small class="help-text">
+                      Abilita controllo accessi bidirezionale (entrata/uscita)
+                    </small>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="config-section">
+                <h4>Configurazioni Avanzate</h4>
+                <div class="form-grid">
                 <div class="form-group">
                   <label for="gate-open-duration">Durata Apertura (sec):</label>
                   <input
@@ -514,6 +554,10 @@
       }
       
       function loadDemoConfig() {
+        // Configurazione Sistema
+        document.getElementById("tornello-id").value = "tornello_01";
+        document.getElementById("bidirectional-mode").checked = true;
+        
         // Dati demo preconfigurati
         document.getElementById("reader1-type").value = "PN532";
         document.getElementById("reader1-interface").value = "I2C";
@@ -569,6 +613,12 @@
         // Raccogli i dati del form
         const formData = new FormData(document.getElementById('config-form'));
         const config = {};
+        
+        // Sistema configuration
+        config.sistema = {
+          tornello_id: formData.get('tornello_id'),
+          bidirectional_mode: formData.has('bidirectional_mode')
+        };
         
         // Simula la raccolta dati come farebbe l'API reale
         config.readers = {
