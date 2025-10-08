@@ -69,7 +69,9 @@
                     </small>
                   </div>
                   <div class="form-group">
-                    <label for="bidirectional-mode">Modalità Bidirezionale:</label>
+                    <label for="bidirectional-mode"
+                      >Modalità Bidirezionale:</label
+                    >
                     <div class="toggle-switch">
                       <input
                         type="checkbox"
@@ -603,7 +605,8 @@
           document.getElementById("tornello-id").value =
             config.data.TORNELLO_ID || "tornello_01";
           document.getElementById("bidirectional-mode").checked =
-            config.data.BIDIRECTIONAL_MODE === "True" || config.data.BIDIRECTIONAL_MODE === "true";
+            config.data.BIDIRECTIONAL_MODE === "True" ||
+            config.data.BIDIRECTIONAL_MODE === "true";
         }
 
         // Readers configuration - use .env variable names
@@ -618,7 +621,7 @@
           document.getElementById("reader1-enabled").checked =
             config.data.ENABLE_IN_READER === "True";
 
-          // Reader 2 (OUT)  
+          // Reader 2 (OUT)
           document.getElementById("reader2-type").value =
             config.data.RFID_OUT_READER_TYPE || "pn532";
           document.getElementById("reader2-interface").value =
@@ -656,19 +659,25 @@
 
         // System configuration - map to .env variables
         config.TORNELLO_ID = formData.get("tornello_id");
-        config.BIDIRECTIONAL_MODE = formData.has("bidirectional_mode") ? "True" : "False";
+        config.BIDIRECTIONAL_MODE = formData.has("bidirectional_mode")
+          ? "True"
+          : "False";
 
         // Build config object from form data using actual .env variable names
-        // Readers configuration  
+        // Readers configuration
         config.RFID_IN_READER_TYPE = formData.get("reader1_type");
         config.RFID_IN_PN532_INTERFACE = formData.get("reader1_interface");
         config.RFID_IN_PN532_I2C_ADDRESS = formData.get("reader1_address");
-        config.ENABLE_IN_READER = formData.has("reader1_enabled") ? "True" : "False";
-        
+        config.ENABLE_IN_READER = formData.has("reader1_enabled")
+          ? "True"
+          : "False";
+
         config.RFID_OUT_READER_TYPE = formData.get("reader2_type");
         config.RFID_OUT_PN532_INTERFACE = formData.get("reader2_interface");
         config.RFID_OUT_PN532_I2C_ADDRESS = formData.get("reader2_address");
-        config.ENABLE_OUT_READER = formData.has("reader2_enabled") ? "True" : "False";
+        config.ENABLE_OUT_READER = formData.has("reader2_enabled")
+          ? "True"
+          : "False";
 
         // Network configuration
         config.MQTT_BROKER = formData.get("mqtt_broker");
@@ -677,9 +686,13 @@
         config.MQTT_PASSWORD = formData.get("mqtt_password");
         config.MQTT_USE_TLS = formData.has("mqtt_enabled") ? "True" : "False";
 
-        // Security configuration  
-        config.AUTH_ENABLED = formData.has("require_authorization") ? "True" : "False";
-        config.OFFLINE_MODE_ENABLED = formData.has("offline_mode_enabled") ? "True" : "False";
+        // Security configuration
+        config.AUTH_ENABLED = formData.has("require_authorization")
+          ? "True"
+          : "False";
+        config.OFFLINE_MODE_ENABLED = formData.has("offline_mode_enabled")
+          ? "True"
+          : "False";
 
         showLoading();
 

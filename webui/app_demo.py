@@ -36,7 +36,22 @@ config_manager = ConfigManager()
 @app.get("/")
 async def home(request: Request):
     """Home page"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@app.get("/config")
+async def config_page(request: Request):
+    """Config page"""
+    return templates.TemplateResponse("config.html", {"request": request})
+
+@app.get("/control")
+async def control_page(request: Request):
+    """Control page"""
+    return templates.TemplateResponse("control.html", {"request": request})
+
+@app.get("/logs")
+async def logs_page(request: Request):
+    """Logs page"""
+    return templates.TemplateResponse("logs.html", {"request": request})
 
 @app.get("/api/config")
 async def get_config():
