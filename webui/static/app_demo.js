@@ -13,13 +13,13 @@ class RFIDGateUI {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 3000;
-    
+
     // 🔓 DEMO MODE: Bypass authentication
     this.token = "demo-token-12345";
     this.user = { username: "Demo User", role: "admin" };
-    
+
     console.log("🎭 DEMO MODE: Authentication bypassed");
-    
+
     // Set demo token in localStorage for consistency
     localStorage.setItem("access_token", this.token);
     localStorage.setItem("user", JSON.stringify(this.user));
@@ -101,13 +101,12 @@ class RFIDGateUI {
     try {
       // Carica stato sistema
       await this.loadSystemStatus();
-      
+
       // Carica log recenti
       await this.loadRecentLogs();
-      
+
       // Avvia aggiornamento automatico
       this.startDashboardRefresh();
-      
     } catch (error) {
       console.error("❌ Errore caricamento dashboard:", error);
       this.showNotification("Errore caricamento dashboard", "error");
@@ -126,7 +125,7 @@ class RFIDGateUI {
       this.updateSystemStatus({
         server: "running",
         config_manager: "active",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   }
@@ -136,7 +135,7 @@ class RFIDGateUI {
     const statusElements = {
       server: document.getElementById("server-status"),
       readers: document.getElementById("readers-status"),
-      network: document.getElementById("network-status")
+      network: document.getElementById("network-status"),
     };
 
     // Server status
@@ -169,7 +168,7 @@ class RFIDGateUI {
     // Aggiorna timestamp
     const timestampElement = document.getElementById("last-update");
     if (timestampElement) {
-      timestampElement.textContent = new Date().toLocaleString('it-IT');
+      timestampElement.textContent = new Date().toLocaleString("it-IT");
     }
   }
 
@@ -182,29 +181,48 @@ class RFIDGateUI {
     // Aggiorna temperatura CPU
     const tempElement = document.getElementById("cpu-temperature");
     if (tempElement) {
-      const tempColor = cpuTemp > 70 ? 'status-error' : cpuTemp > 60 ? 'status-warning' : 'status-online';
+      const tempColor =
+        cpuTemp > 70
+          ? "status-error"
+          : cpuTemp > 60
+          ? "status-warning"
+          : "status-online";
       tempElement.innerHTML = `<span class="${tempColor}">${cpuTemp}°C</span>`;
     }
 
     // Aggiorna carico CPU
     const loadElement = document.getElementById("cpu-load");
     if (loadElement) {
-      const loadColor = cpuLoad > 80 ? 'status-error' : cpuLoad > 60 ? 'status-warning' : 'status-online';
+      const loadColor =
+        cpuLoad > 80
+          ? "status-error"
+          : cpuLoad > 60
+          ? "status-warning"
+          : "status-online";
       loadElement.innerHTML = `<span class="${loadColor}">${cpuLoad}%</span>`;
     }
 
     // Aggiorna spazio disco
     const diskElement = document.getElementById("disk-usage");
     if (diskElement) {
-      const diskColor = diskUsage > 80 ? 'status-error' : diskUsage > 70 ? 'status-warning' : 'status-online';
+      const diskColor =
+        diskUsage > 80
+          ? "status-error"
+          : diskUsage > 70
+          ? "status-warning"
+          : "status-online";
       diskElement.innerHTML = `<span class="${diskColor}">${diskUsage}%</span>`;
     }
 
     // Aggiorna indicatore status Raspberry Pi
     const rpiStatusElement = document.getElementById("rpi-status");
     if (rpiStatusElement) {
-      const overallStatus = cpuTemp > 70 || cpuLoad > 80 || diskUsage > 80 ? 'status-error' : 
-                           cpuTemp > 60 || cpuLoad > 60 || diskUsage > 70 ? 'status-warning' : 'status-online';
+      const overallStatus =
+        cpuTemp > 70 || cpuLoad > 80 || diskUsage > 80
+          ? "status-error"
+          : cpuTemp > 60 || cpuLoad > 60 || diskUsage > 70
+          ? "status-warning"
+          : "status-online";
       rpiStatusElement.innerHTML = `<i class="fas fa-circle ${overallStatus}"></i>`;
     }
   }
@@ -217,22 +235,22 @@ class RFIDGateUI {
         user_name: "Mario Rossi",
         uid: "04:12:34:56",
         access_granted: true,
-        reader_id: "reader_1"
+        reader_id: "reader_1",
       },
       {
-        timestamp: new Date(Date.now() - 600000).toISOString(), 
+        timestamp: new Date(Date.now() - 600000).toISOString(),
         user_name: "Anna Verdi",
         uid: "04:56:78:90",
         access_granted: true,
-        reader_id: "reader_2"
+        reader_id: "reader_2",
       },
       {
         timestamp: new Date(Date.now() - 900000).toISOString(),
-        user_name: "Utente Sconosciuto", 
+        user_name: "Utente Sconosciuto",
         uid: "04:AA:BB:CC",
         access_granted: false,
-        reader_id: "reader_1"
-      }
+        reader_id: "reader_1",
+      },
     ];
 
     this.displayRecentLogs(demoLogs);
@@ -242,17 +260,25 @@ class RFIDGateUI {
     const container = document.getElementById("recent-logs");
     if (!container) return;
 
-    container.innerHTML = logs.map(log => `
-      <div class="log-entry ${log.access_granted ? 'success' : 'error'}">
-        <div class="log-time">${new Date(log.timestamp).toLocaleTimeString('it-IT')}</div>
+    container.innerHTML = logs
+      .map(
+        (log) => `
+      <div class="log-entry ${log.access_granted ? "success" : "error"}">
+        <div class="log-time">${new Date(log.timestamp).toLocaleTimeString(
+          "it-IT"
+        )}</div>
         <div class="log-user">${log.user_name}</div>
         <div class="log-uid">${log.uid}</div>
         <div class="log-status">
-          <i class="fas ${log.access_granted ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-          ${log.access_granted ? 'Accesso' : 'Negato'}
+          <i class="fas ${
+            log.access_granted ? "fa-check-circle" : "fa-times-circle"
+          }"></i>
+          ${log.access_granted ? "Accesso" : "Negato"}
         </div>
       </div>
-    `).join('');
+    `
+      )
+      .join("");
   }
 
   startDashboardRefresh() {
@@ -263,7 +289,7 @@ class RFIDGateUI {
   }
 
   // ===========================================
-  // ⚙️ CONFIGURATION FUNCTIONALITY  
+  // ⚙️ CONFIGURATION FUNCTIONALITY
   // ===========================================
 
   async loadConfiguration() {
@@ -283,46 +309,47 @@ class RFIDGateUI {
     // Mappa i campi della configurazione ai form fields
     const fieldMap = {
       // Sistema
-      'TORNELLO_ID': 'tornello_id',
-      'BIDIRECTIONAL_MODE': 'bidirectional_mode',
-      
-      // Lettori RFID  
-      'READER_1_ENABLED': 'reader_1_enabled',
-      'READER_1_SPI_BUS': 'reader_1_spi_bus',
-      'READER_1_SPI_DEVICE': 'reader_1_spi_device',
-      'READER_1_IRQ_PIN': 'reader_1_irq_pin',
-      'READER_1_RESET_PIN': 'reader_1_reset_pin',
-      
-      'READER_2_ENABLED': 'reader_2_enabled', 
-      'READER_2_SPI_BUS': 'reader_2_spi_bus',
-      'READER_2_SPI_DEVICE': 'reader_2_spi_device',
-      'READER_2_IRQ_PIN': 'reader_2_irq_pin',
-      'READER_2_RESET_PIN': 'reader_2_reset_pin',
-      
+      TORNELLO_ID: "tornello_id",
+      BIDIRECTIONAL_MODE: "bidirectional_mode",
+
+      // Lettori RFID
+      READER_1_ENABLED: "reader_1_enabled",
+      READER_1_SPI_BUS: "reader_1_spi_bus",
+      READER_1_SPI_DEVICE: "reader_1_spi_device",
+      READER_1_IRQ_PIN: "reader_1_irq_pin",
+      READER_1_RESET_PIN: "reader_1_reset_pin",
+
+      READER_2_ENABLED: "reader_2_enabled",
+      READER_2_SPI_BUS: "reader_2_spi_bus",
+      READER_2_SPI_DEVICE: "reader_2_spi_device",
+      READER_2_IRQ_PIN: "reader_2_irq_pin",
+      READER_2_RESET_PIN: "reader_2_reset_pin",
+
       // Relè
-      'RELAY_IN_ENABLE': 'relay_in_enable',
-      'RELAY_IN_PIN': 'relay_in_pin',
-      'RELAY_IN_ACTIVE_TIME': 'relay_in_active_time',
-      'RELAY_IN_ACTIVE_LOW': 'relay_in_active_low',
-      'RELAY_OUT_ENABLE': 'relay_out_enable',
-      'RELAY_OUT_PIN': 'relay_out_pin',
-      'RELAY_OUT_ACTIVE_TIME': 'relay_out_active_time',
-      'RELAY_OUT_ACTIVE_LOW': 'relay_out_active_low',
-      
+      RELAY_IN_ENABLE: "relay_in_enable",
+      RELAY_IN_PIN: "relay_in_pin",
+      RELAY_IN_ACTIVE_TIME: "relay_in_active_time",
+      RELAY_IN_ACTIVE_LOW: "relay_in_active_low",
+      RELAY_OUT_ENABLE: "relay_out_enable",
+      RELAY_OUT_PIN: "relay_out_pin",
+      RELAY_OUT_ACTIVE_TIME: "relay_out_active_time",
+      RELAY_OUT_ACTIVE_LOW: "relay_out_active_low",
+
       // Rete
-      'MQTT_BROKER': 'mqtt_broker',
-      'MQTT_PORT': 'mqtt_port',
-      'MQTT_USERNAME': 'mqtt_username', 
-      'MQTT_PASSWORD': 'mqtt_password',
-      'MQTT_TOPIC_BASE': 'mqtt_topic_base'
+      MQTT_BROKER: "mqtt_broker",
+      MQTT_PORT: "mqtt_port",
+      MQTT_USERNAME: "mqtt_username",
+      MQTT_PASSWORD: "mqtt_password",
+      MQTT_TOPIC_BASE: "mqtt_topic_base",
     };
 
     // Popola i campi del form
     Object.entries(fieldMap).forEach(([envKey, fieldName]) => {
       const element = document.getElementById(fieldName);
       if (element && config[envKey] !== undefined) {
-        if (element.type === 'checkbox') {
-          element.checked = config[envKey] === 'true' || config[envKey] === true;
+        if (element.type === "checkbox") {
+          element.checked =
+            config[envKey] === "true" || config[envKey] === true;
         } else {
           element.value = config[envKey];
         }
@@ -332,8 +359,8 @@ class RFIDGateUI {
 
   async saveConfiguration() {
     console.log("💾 Saving configuration...");
-    
-    const form = document.getElementById('config-form');
+
+    const form = document.getElementById("config-form");
     if (!form) {
       this.showNotification("Form di configurazione non trovato", "error");
       return;
@@ -345,42 +372,42 @@ class RFIDGateUI {
 
     // Mappa inversa: da field name a env variable
     const fieldMap = {
-      'tornello_id': 'TORNELLO_ID',
-      'bidirectional_mode': 'BIDIRECTIONAL_MODE',
-      
-      'reader_1_enabled': 'READER_1_ENABLED',
-      'reader_1_spi_bus': 'READER_1_SPI_BUS', 
-      'reader_1_spi_device': 'READER_1_SPI_DEVICE',
-      'reader_1_irq_pin': 'READER_1_IRQ_PIN',
-      'reader_1_reset_pin': 'READER_1_RESET_PIN',
-      
-      'reader_2_enabled': 'READER_2_ENABLED',
-      'reader_2_spi_bus': 'READER_2_SPI_BUS',
-      'reader_2_spi_device': 'READER_2_SPI_DEVICE', 
-      'reader_2_irq_pin': 'READER_2_IRQ_PIN',
-      'reader_2_reset_pin': 'READER_2_RESET_PIN',
-      
-      'relay_in_enable': 'RELAY_IN_ENABLE',
-      'relay_in_pin': 'RELAY_IN_PIN',
-      'relay_in_active_time': 'RELAY_IN_ACTIVE_TIME',
-      'relay_in_active_low': 'RELAY_IN_ACTIVE_LOW',
-      'relay_out_enable': 'RELAY_OUT_ENABLE',
-      'relay_out_pin': 'RELAY_OUT_PIN',
-      'relay_out_active_time': 'RELAY_OUT_ACTIVE_TIME',
-      'relay_out_active_low': 'RELAY_OUT_ACTIVE_LOW',
-      
-      'mqtt_broker': 'MQTT_BROKER',
-      'mqtt_port': 'MQTT_PORT',
-      'mqtt_username': 'MQTT_USERNAME',
-      'mqtt_password': 'MQTT_PASSWORD',
-      'mqtt_topic_base': 'MQTT_TOPIC_BASE'
+      tornello_id: "TORNELLO_ID",
+      bidirectional_mode: "BIDIRECTIONAL_MODE",
+
+      reader_1_enabled: "READER_1_ENABLED",
+      reader_1_spi_bus: "READER_1_SPI_BUS",
+      reader_1_spi_device: "READER_1_SPI_DEVICE",
+      reader_1_irq_pin: "READER_1_IRQ_PIN",
+      reader_1_reset_pin: "READER_1_RESET_PIN",
+
+      reader_2_enabled: "READER_2_ENABLED",
+      reader_2_spi_bus: "READER_2_SPI_BUS",
+      reader_2_spi_device: "READER_2_SPI_DEVICE",
+      reader_2_irq_pin: "READER_2_IRQ_PIN",
+      reader_2_reset_pin: "READER_2_RESET_PIN",
+
+      relay_in_enable: "RELAY_IN_ENABLE",
+      relay_in_pin: "RELAY_IN_PIN",
+      relay_in_active_time: "RELAY_IN_ACTIVE_TIME",
+      relay_in_active_low: "RELAY_IN_ACTIVE_LOW",
+      relay_out_enable: "RELAY_OUT_ENABLE",
+      relay_out_pin: "RELAY_OUT_PIN",
+      relay_out_active_time: "RELAY_OUT_ACTIVE_TIME",
+      relay_out_active_low: "RELAY_OUT_ACTIVE_LOW",
+
+      mqtt_broker: "MQTT_BROKER",
+      mqtt_port: "MQTT_PORT",
+      mqtt_username: "MQTT_USERNAME",
+      mqtt_password: "MQTT_PASSWORD",
+      mqtt_topic_base: "MQTT_TOPIC_BASE",
     };
 
     // Converti FormData in oggetto usando la mappa
     for (const [fieldName, envKey] of Object.entries(fieldMap)) {
       const element = document.getElementById(fieldName);
       if (element) {
-        if (element.type === 'checkbox') {
+        if (element.type === "checkbox") {
           configData[envKey] = element.checked.toString();
         } else {
           configData[envKey] = element.value;
@@ -391,11 +418,14 @@ class RFIDGateUI {
     try {
       const response = await this.apiRequest("/api/config", {
         method: "POST",
-        body: JSON.stringify(configData)
+        body: JSON.stringify(configData),
       });
 
       if (response.status === "success") {
-        this.showNotification("Configurazione salvata con successo!", "success");
+        this.showNotification(
+          "Configurazione salvata con successo!",
+          "success"
+        );
       } else {
         throw new Error(response.message || "Errore sconosciuto");
       }
@@ -420,18 +450,20 @@ class RFIDGateUI {
   }
 
   // ===========================================
-  // 📋 LOGS FUNCTIONALITY  
+  // 📋 LOGS FUNCTIONALITY
   // ===========================================
 
   async loadLogs() {
     console.log("📋 Loading logs...");
     // Usa dati demo per i log
-    const demoLogs = Array.from({length: 20}, (_, i) => ({
+    const demoLogs = Array.from({ length: 20 }, (_, i) => ({
       timestamp: new Date(Date.now() - i * 900000).toISOString(),
       user_name: `Utente ${i + 1}`,
-      uid: `04:${(10 + i).toString(16).toUpperCase()}:${(20 + i).toString(16).toUpperCase()}:${(30 + i).toString(16).toUpperCase()}`,
+      uid: `04:${(10 + i).toString(16).toUpperCase()}:${(20 + i)
+        .toString(16)
+        .toUpperCase()}:${(30 + i).toString(16).toUpperCase()}`,
       access_granted: Math.random() > 0.2,
-      reader_id: `reader_${(i % 2) + 1}`
+      reader_id: `reader_${(i % 2) + 1}`,
     }));
 
     this.displayLogs(demoLogs);
@@ -441,20 +473,26 @@ class RFIDGateUI {
     const container = document.getElementById("logs-container");
     if (!container) return;
 
-    container.innerHTML = logs.map(log => `
-      <tr class="${log.access_granted ? 'success' : 'error'}">
-        <td>${new Date(log.timestamp).toLocaleString('it-IT')}</td>
+    container.innerHTML = logs
+      .map(
+        (log) => `
+      <tr class="${log.access_granted ? "success" : "error"}">
+        <td>${new Date(log.timestamp).toLocaleString("it-IT")}</td>
         <td>${log.user_name}</td>
         <td><code>${log.uid}</code></td>
         <td>
-          <span class="status-badge ${log.access_granted ? 'success' : 'error'}">
-            <i class="fas ${log.access_granted ? 'fa-check' : 'fa-times'}"></i>
-            ${log.access_granted ? 'Accesso' : 'Negato'}
+          <span class="status-badge ${
+            log.access_granted ? "success" : "error"
+          }">
+            <i class="fas ${log.access_granted ? "fa-check" : "fa-times"}"></i>
+            ${log.access_granted ? "Accesso" : "Negato"}
           </span>
         </td>
         <td>${log.reader_id}</td>
       </tr>
-    `).join('');
+    `
+      )
+      .join("");
   }
 
   // ===========================================
@@ -495,9 +533,9 @@ class RFIDGateUI {
   getNotificationIcon(type) {
     const icons = {
       success: "fa-check-circle",
-      error: "fa-exclamation-circle", 
+      error: "fa-exclamation-circle",
       warning: "fa-exclamation-triangle",
-      info: "fa-info-circle"
+      info: "fa-info-circle",
     };
     return icons[type] || icons.info;
   }
@@ -510,19 +548,19 @@ class RFIDGateUI {
 // Inizializza l'app quando il DOM è pronto
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🎭 RFID Gate Demo UI - Initializing...");
-  
+
   // Crea istanza globale
   window.rfidGateUI = new RFIDGateUI();
-  
+
   // Funzioni globali per i template
   window.logout = () => window.rfidGateUI.logout();
   window.openGate = () => window.rfidGateUI.openGate();
   window.emergencyStop = () => window.rfidGateUI.emergencyStop();
   window.saveConfig = () => window.rfidGateUI.saveConfiguration();
-  
+
   // Carica contenuto basato sulla pagina corrente
   const currentPage = window.location.pathname;
-  
+
   if (currentPage === "/" || currentPage === "/dashboard") {
     window.rfidGateUI.loadDashboard();
   } else if (currentPage === "/config") {
@@ -530,6 +568,6 @@ document.addEventListener("DOMContentLoaded", () => {
   } else if (currentPage === "/logs") {
     window.rfidGateUI.loadLogs();
   }
-  
+
   console.log("✅ RFID Gate Demo UI - Ready!");
 });
