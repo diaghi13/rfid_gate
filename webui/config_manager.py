@@ -241,10 +241,30 @@ class ConfigManager:
             except ValueError:
                 errors.append("RELAY_IN_PIN deve essere un numero")
         
+        if "RELAY_OUT_PIN" in config:
+            try:
+                pin = int(config["RELAY_OUT_PIN"])
+                if not (1 <= pin <= 40):
+                    errors.append("RELAY_OUT_PIN deve essere tra 1 e 40")
+            except ValueError:
+                errors.append("RELAY_OUT_PIN deve essere un numero")
+        
+        # Validazione timing relè
+        for relay_type in ["IN", "OUT"]:
+            time_key = f"RELAY_{relay_type}_ACTIVE_TIME"
+            if time_key in config:
+                try:
+                    time_val = float(config[time_key])
+                    if not (0.1 <= time_val <= 30):
+                        errors.append(f"{time_key} deve essere tra 0.1 e 30 secondi")
+                except ValueError:
+                    errors.append(f"{time_key} deve essere un numero")
+
         # Validazione formato booleano
         bool_keys = [
             "MQTT_USE_TLS", "BIDIRECTIONAL_MODE", "RFID_IN_ENABLE", 
-            "RFID_OUT_ENABLE", "AUTH_ENABLED", "OFFLINE_MODE_ENABLED"
+            "RFID_OUT_ENABLE", "AUTH_ENABLED", "OFFLINE_MODE_ENABLED",
+            "RELAY_IN_ENABLE", "RELAY_OUT_ENABLE", "RELAY_IN_ACTIVE_LOW", "RELAY_OUT_ACTIVE_LOW"
         ]
         
         for key in bool_keys:

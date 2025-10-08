@@ -204,6 +204,109 @@
             </div>
           </div>
 
+          <!-- Relay Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-plug"></i> Configurazione Relè</h3>
+              <button
+                type="button"
+                onclick="testRelays()"
+                class="btn btn-info btn-sm"
+              >
+                <i class="fas fa-play"></i> Test Relè
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="config-section">
+                <div class="row">
+                  <!-- Relè IN -->
+                  <div class="col">
+                    <h4><i class="fas fa-arrow-right"></i> Relè IN (Ingresso)</h4>
+                    <div class="form-group">
+                      <label for="relay_in_enable">Abilita Relè IN:</label>
+                      <input type="checkbox" id="relay_in_enable" name="relay_in_enable" checked />
+                      <small>Controlla l'apertura per ingresso</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_in_pin">Pin GPIO Relè IN:</label>
+                      <input
+                        type="number"
+                        id="relay_in_pin"
+                        name="relay_in_pin"
+                        class="form-control"
+                        value="18"
+                        min="2"
+                        max="27"
+                      />
+                      <small>Pin GPIO per controllo relè ingresso</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_in_active_time">Tempo Attivazione (secondi):</label>
+                      <input
+                        type="number"
+                        id="relay_in_active_time"
+                        name="relay_in_active_time"
+                        class="form-control"
+                        value="3"
+                        min="1"
+                        max="30"
+                        step="0.5"
+                      />
+                      <small>Durata apertura relè ingresso</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_in_active_low">Logica Attiva Bassa:</label>
+                      <input type="checkbox" id="relay_in_active_low" name="relay_in_active_low" checked />
+                      <small>Relè attivo su livello logico basso</small>
+                    </div>
+                  </div>
+
+                  <!-- Relè OUT -->
+                  <div class="col">
+                    <h4><i class="fas fa-arrow-left"></i> Relè OUT (Uscita)</h4>
+                    <div class="form-group">
+                      <label for="relay_out_enable">Abilita Relè OUT:</label>
+                      <input type="checkbox" id="relay_out_enable" name="relay_out_enable" checked />
+                      <small>Controlla l'apertura per uscita (solo modalità bidirezionale)</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_out_pin">Pin GPIO Relè OUT:</label>
+                      <input
+                        type="number"
+                        id="relay_out_pin"
+                        name="relay_out_pin"
+                        class="form-control"
+                        value="19"
+                        min="2"
+                        max="27"
+                      />
+                      <small>Pin GPIO per controllo relè uscita</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_out_active_time">Tempo Attivazione (secondi):</label>
+                      <input
+                        type="number"
+                        id="relay_out_active_time"
+                        name="relay_out_active_time"
+                        class="form-control"
+                        value="3"
+                        min="1"
+                        max="30"
+                        step="0.5"
+                      />
+                      <small>Durata apertura relè uscita</small>
+                    </div>
+                    <div class="form-group">
+                      <label for="relay_out_active_low">Logica Attiva Bassa:</label>
+                      <input type="checkbox" id="relay_out_active_low" name="relay_out_active_low" checked />
+                      <small>Relè attivo su livello logico basso</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Network Configuration -->
           <div class="card">
             <div class="card-header">
@@ -548,7 +651,11 @@
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    {% if demo_mode %}
+    <script src="/static/app_demo.js"></script>
+    {% else %}
     <script src="/static/app.js"></script>
+    {% endif %}
     <script>
       // Initialize config page
       document.addEventListener("DOMContentLoaded", function () {
@@ -643,6 +750,25 @@
           document.getElementById("mqtt-enabled").checked =
             config.data.MQTT_USE_TLS === "True";
 
+          // Relay configuration
+          document.getElementById("relay_in_enable").checked =
+            config.data.RELAY_IN_ENABLE === "True";
+          document.getElementById("relay_in_pin").value =
+            config.data.RELAY_IN_PIN || "18";
+          document.getElementById("relay_in_active_time").value =
+            config.data.RELAY_IN_ACTIVE_TIME || "3";
+          document.getElementById("relay_in_active_low").checked =
+            config.data.RELAY_IN_ACTIVE_LOW === "True";
+
+          document.getElementById("relay_out_enable").checked =
+            config.data.RELAY_OUT_ENABLE === "True";
+          document.getElementById("relay_out_pin").value =
+            config.data.RELAY_OUT_PIN || "19";
+          document.getElementById("relay_out_active_time").value =
+            config.data.RELAY_OUT_ACTIVE_TIME || "3";
+          document.getElementById("relay_out_active_low").checked =
+            config.data.RELAY_OUT_ACTIVE_LOW === "True";
+
           // Security configuration
           document.getElementById("require-auth").checked =
             config.data.AUTH_ENABLED === "True";
@@ -685,6 +811,17 @@
         config.MQTT_USERNAME = formData.get("mqtt_username");
         config.MQTT_PASSWORD = formData.get("mqtt_password");
         config.MQTT_USE_TLS = formData.has("mqtt_enabled") ? "True" : "False";
+
+        // Relay configuration
+        config.RELAY_IN_ENABLE = formData.has("relay_in_enable") ? "True" : "False";
+        config.RELAY_IN_PIN = formData.get("relay_in_pin");
+        config.RELAY_IN_ACTIVE_TIME = formData.get("relay_in_active_time");
+        config.RELAY_IN_ACTIVE_LOW = formData.has("relay_in_active_low") ? "True" : "False";
+        
+        config.RELAY_OUT_ENABLE = formData.has("relay_out_enable") ? "True" : "False";
+        config.RELAY_OUT_PIN = formData.get("relay_out_pin");
+        config.RELAY_OUT_ACTIVE_TIME = formData.get("relay_out_active_time");
+        config.RELAY_OUT_ACTIVE_LOW = formData.has("relay_out_active_low") ? "True" : "False";
 
         // Security configuration
         config.AUTH_ENABLED = formData.has("require_authorization")
@@ -821,6 +958,15 @@
         // Mock test - in real implementation would call API
         setTimeout(() => {
           showToast("Test lettori completato: 2/2 funzionanti", "success");
+        }, 2000);
+      }
+
+      async function testRelays() {
+        showToast("Test relè in corso...", "info");
+
+        // Mock test - in real implementation would call API
+        setTimeout(() => {
+          showToast("Test relè completato: IN/OUT funzionanti", "success");
         }, 2000);
       }
 

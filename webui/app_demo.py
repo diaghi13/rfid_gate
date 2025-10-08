@@ -12,9 +12,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 import uvicorn
 
 # Configura logging
@@ -33,25 +34,37 @@ templates = Jinja2Templates(directory="templates")
 # Inizializza ConfigManager
 config_manager = ConfigManager()
 
+def modify_template_for_demo(html_content: str) -> str:
+    """Modifica il contenuto HTML per utilizzare app_demo.js invece di app.js"""
+    return html_content.replace(
+        '<script src="/static/app.js"></script>',
+        '<script src="/static/app_demo.js"></script>'
+    )
+
 @app.get("/")
 async def home(request: Request):
     """Home page"""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse("index.html", {"request": request, "demo_mode": True})
+
+@app.get("/dashboard")
+async def dashboard_page(request: Request):
+    """Dashboard page"""
+    return templates.TemplateResponse("dashboard.html", {"request": request, "demo_mode": True})
 
 @app.get("/config")
 async def config_page(request: Request):
     """Config page"""
-    return templates.TemplateResponse("config.html", {"request": request})
+    return templates.TemplateResponse("config.html", {"request": request, "demo_mode": True})
 
 @app.get("/control")
 async def control_page(request: Request):
     """Control page"""
-    return templates.TemplateResponse("control.html", {"request": request})
+    return templates.TemplateResponse("control.html", {"request": request, "demo_mode": True})
 
 @app.get("/logs")
 async def logs_page(request: Request):
     """Logs page"""
-    return templates.TemplateResponse("logs.html", {"request": request})
+    return templates.TemplateResponse("logs.html", {"request": request, "demo_mode": True})
 
 @app.get("/api/config")
 async def get_config():

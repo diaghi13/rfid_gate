@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RFID Gate System - Home</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      /* Stili specifici per la homepage */
+      .hero-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 3rem 2rem;
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+      
+      .hero-title {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        font-weight: 700;
+      }
+      
+      .hero-subtitle {
+        font-size: 1.2rem;
+        opacity: 0.9;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      
+      .navigation-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      
+      .nav-card {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        text-decoration: none;
+        color: inherit;
+        border: 2px solid transparent;
+      }
+      
+      .nav-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+        border-color: var(--primary-color);
+        text-decoration: none;
+      }
+      
+      .nav-card-icon {
+        font-size: 3.5rem;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .nav-card-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #2d3748;
+      }
+      
+      .nav-card-description {
+        color: #718096;
+        line-height: 1.6;
+        margin-bottom: 1.5rem;
+      }
+      
+      .nav-card-badge {
+        display: inline-block;
+        background: #e6fffa;
+        color: #319795;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+      
+      .nav-card.dashboard .nav-card-icon { color: #3182ce; }
+      .nav-card.config .nav-card-icon { color: #805ad5; }
+      .nav-card.control .nav-card-icon { color: #38a169; }
+      .nav-card.logs .nav-card-icon { color: #d69e2e; }
+      
+      .status-overview {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 2rem auto;
+        max-width: 800px;
+        padding: 0 2rem;
+      }
+      
+      .status-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      }
+      
+      .status-item-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+      }
+      
+      .status-item-label {
+        font-size: 0.875rem;
+        color: #718096;
+        margin-bottom: 0.25rem;
+      }
+      
+      .status-item-value {
+        font-weight: 600;
+        font-size: 1.1rem;
+      }
+      
+      .footer-info {
+        text-align: center;
+        padding: 2rem;
+        color: #718096;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 3rem;
+      }
+      
+      @media (max-width: 768px) {
+        .hero-title {
+          font-size: 2rem;
+        }
+        
+        .navigation-grid {
+          grid-template-columns: 1fr;
+          padding: 1rem;
+        }
+        
+        .nav-card {
+          padding: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <h1 class="hero-title">
+          <i class="fas fa-door-open"></i>
+          RFID Gate System
+        </h1>
+        <p class="hero-subtitle">
+          Sistema di controllo accessi avanzato per tornelli e cancelli automatici.
+          Gestione centralizzata, monitoraggio in tempo reale e configurazione semplificata.
+        </p>
+      </section>
+
+      <!-- Status Overview -->
+      <div class="status-overview">
+        <div class="status-item">
+          <div class="status-item-icon">
+            <i class="fas fa-circle status-online"></i>
+          </div>
+          <div class="status-item-label">Sistema</div>
+          <div class="status-item-value" id="system-status-home">Online</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-icon">
+            <i class="fas fa-wifi status-online"></i>
+          </div>
+          <div class="status-item-label">Connessione</div>
+          <div class="status-item-value" id="connection-status-home">Attiva</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-icon">
+            <i class="fas fa-microchip status-online"></i>
+          </div>
+          <div class="status-item-label">Lettori</div>
+          <div class="status-item-value" id="readers-status-home">2/2</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-icon">
+            <i class="fas fa-thermometer-half status-online"></i>
+          </div>
+          <div class="status-item-label">Temperatura</div>
+          <div class="status-item-value" id="temperature-status-home">-</div>
+        </div>
+      </div>
+
+      <!-- Navigation Grid -->
+      <div class="navigation-grid">
+        <!-- Dashboard -->
+        <a href="/dashboard" class="nav-card dashboard">
+          <div class="nav-card-icon">
+            <i class="fas fa-tachometer-alt"></i>
+          </div>
+          <h3 class="nav-card-title">Dashboard</h3>
+          <p class="nav-card-description">
+            Monitora lo stato del sistema in tempo reale. Visualizza statistiche degli accessi,
+            stato hardware e informazioni di rete.
+          </p>
+          <span class="nav-card-badge">Monitoraggio</span>
+        </a>
+
+        <!-- Configurazione -->
+        <a href="/config" class="nav-card config">
+          <div class="nav-card-icon">
+            <i class="fas fa-cog"></i>
+          </div>
+          <h3 class="nav-card-title">Configurazione</h3>
+          <p class="nav-card-description">
+            Gestisci le impostazioni del sistema, configura lettori RFID, relè e parametri di rete.
+            Backup e ripristino configurazioni.
+          </p>
+          <span class="nav-card-badge">Impostazioni</span>
+        </a>
+
+        <!-- Controllo Manuale -->
+        <a href="/control" class="nav-card control">
+          <div class="nav-card-icon">
+            <i class="fas fa-hand-pointer"></i>
+          </div>
+          <h3 class="nav-card-title">Controllo Manuale</h3>
+          <p class="nav-card-description">
+            Apertura manuale del cancello, test dei sistemi e controlli di emergenza.
+            Perfetto per manutenzione e test.
+          </p>
+          <span class="nav-card-badge">Azioni</span>
+        </a>
+
+        <!-- Log Accessi -->
+        <a href="/logs" class="nav-card logs">
+          <div class="nav-card-icon">
+            <i class="fas fa-list"></i>
+          </div>
+          <h3 class="nav-card-title">Log Accessi</h3>
+          <p class="nav-card-description">
+            Consulta lo storico degli accessi, ricerca per utente o carta, esporta dati
+            e analizza le statistiche di utilizzo.
+          </p>
+          <span class="nav-card-badge">Cronologia</span>
+        </a>
+      </div>
+
+      <!-- Footer Info -->
+      <footer class="footer-info">
+        <p>
+          <i class="fas fa-info-circle"></i>
+          Sistema RFID Gate v2.0 - Gestione accessi intelligente
+        </p>
+        <p>
+          <small>Ultima sincronizzazione: <span id="last-sync">-</span></small>
+        </p>
+      </footer>
+    </div>
+
+    <!-- Scripts -->
+    {% if demo_mode %}
+    <script src="/static/app_demo.js"></script>
+    {% else %}
+    <script src="/static/app.js"></script>
+    {% endif %}
+    
+    <script>
+      // Inizializzazione homepage
+      document.addEventListener("DOMContentLoaded", function () {
+        loadHomeStatus();
+        
+        // Aggiorna status ogni 30 secondi
+        setInterval(loadHomeStatus, 30000);
+      });
+
+      async function loadHomeStatus() {
+        try {
+          // Simula chiamata API per lo status
+          const status = {
+            system: "online",
+            connection: "active", 
+            readers: "2/2",
+            temperature: Math.floor(45 + Math.random() * 15) + "°C"
+          };
+
+          // Aggiorna elementi della pagina
+          document.getElementById("system-status-home").textContent = 
+            status.system === "online" ? "Online" : "Offline";
+          document.getElementById("connection-status-home").textContent = 
+            status.connection === "active" ? "Attiva" : "Inattiva";
+          document.getElementById("readers-status-home").textContent = status.readers;
+          document.getElementById("temperature-status-home").textContent = status.temperature;
+          
+          // Aggiorna timestamp
+          document.getElementById("last-sync").textContent = 
+            new Date().toLocaleString('it-IT');
+
+        } catch (error) {
+          console.error("Errore caricamento status homepage:", error);
+        }
+      }
+
+      // Aggiungi effetti di hover migliorati
+      document.querySelectorAll('.nav-card').forEach(card => {
+        card.addEventListener('mouseenter', function() {
+          this.style.transform = 'translateY(-8px) scale(1.02)';
+        });
+        
+        card.addEventListener('mouseleave', function() {
+          this.style.transform = 'translateY(0) scale(1)';
+        });
+      });
+    </script>
+  </body>
+</html>

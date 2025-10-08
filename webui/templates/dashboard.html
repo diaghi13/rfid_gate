@@ -86,6 +86,28 @@
             </div>
           </div>
 
+          <!-- Raspberry Pi Status -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-thermometer-half"></i> Raspberry Pi</h3>
+              <span class="status-indicator" id="rpi-status"></span>
+            </div>
+            <div class="card-content">
+              <div class="stat">
+                <span class="stat-label">Temperatura CPU:</span>
+                <span class="stat-value" id="cpu-temperature">-</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Carico CPU:</span>
+                <span class="stat-value" id="cpu-load">-</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Spazio disco:</span>
+                <span class="stat-value" id="disk-usage">-</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Network Status -->
           <div class="card">
             <div class="card-header">
@@ -180,7 +202,11 @@
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    {% if demo_mode %}
+    <script src="/static/app_demo.js"></script>
+    {% else %}
     <script src="/static/app.js"></script>
+    {% endif %}
     <script>
       // Initialize dashboard
       document.addEventListener("DOMContentLoaded", function () {

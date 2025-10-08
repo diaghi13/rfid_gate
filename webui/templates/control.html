@@ -246,7 +246,11 @@
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
 
+    {% if demo_mode %}
+    <script src="/static/app_demo.js"></script>
+    {% else %}
     <script src="/static/app.js"></script>
+    {% endif %}
     <script>
       let pendingAction = null;
 
