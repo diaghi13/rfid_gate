@@ -21,21 +21,24 @@ python3 tests/test_refactored_system.py
 ### **🌐 Web UI (Nuovo!)**
 
 ```bash
-# Avvia interfaccia web
-cd webui
-python3 start.py
+# Avvia server FastAPI completo
+cd webui && python3 app_demo.py
+# Server: http://localhost:8080
 
-# Accedi a: http://localhost:8080
-# Username: admin | Password: admin123
+# Oppure server demo semplice
+cd webui && python3 simple_server.py
+# Demo: http://localhost:8082
 ```
 
-**Funzionalità Web UI:**
+**🎯 Funzionalità Web UI:**
 
-- 📊 Dashboard real-time con stato sistema
-- 🎮 Controllo manuale tornello da remoto
-- 📋 Gestione log accessi con filtri avanzati
-- ⚙️ Configurazione sistema via web
-- 📱 Design responsive per mobile/tablet
+- 📊 **Dashboard**: Monitoraggio real-time stato sistema
+- 🎮 **Controllo**: Apertura manuale tornello da remoto
+- 📋 **Log Manager**: Visualizzazione log accessi con filtri avanzati
+- ⚙️ **Configurazione**: Gestione completa file `.env` da web interface
+- � **Backup System**: Backup automatici e ripristino configurazioni
+- 📱 **Responsive**: Design ottimizzato per mobile/tablet
+- 🔒 **Sicurezza**: Autenticazione JWT e validazione configurazioni
 
 ## 📋 Features
 
@@ -48,6 +51,35 @@ python3 start.py
 - ✅ **Anti-Crosstalk**: Debounce globale avanzato
 - ✅ **Hardware Abstraction**: Supporto multi-platform
 - 🆕 **Web UI**: Interfaccia web moderna per gestione completa
+- 🆕 **Config Manager**: Gestione file .env da interfaccia web
+
+## 📁 Struttura Progetto (Post-Refactor)
+
+```
+rfid_gate/
+├── 📂 rfid_gate/           # 🏗️ Core system modules
+│   ├── config/             # ⚙️ Configuration management
+│   ├── core/               # 🎯 Business logic
+│   ├── hardware/           # 🔧 Hardware abstraction
+│   ├── network/            # 📡 MQTT & networking
+│   ├── logging/            # 📊 Logging system
+│   └── utils/              # 🛠️ Utilities
+├── 📂 webui/               # 🌐 Web interface
+│   ├── templates/          # 📄 HTML templates
+│   ├── static/             # 🎨 CSS/JS/Assets
+│   ├── app.py              # 🚀 FastAPI server
+│   ├── app_demo.py         # 🧪 Demo server
+│   ├── simple_server.py    # 📡 Simple HTTP server
+│   └── config_manager.py   # ⚙️ .env file manager
+├── 📂 tests/               # 🧪 Test suite
+├── 📂 tools/               # 🔧 Utility scripts
+├── 📂 scripts/             # 📜 Management scripts
+├── 📂 docs/                # 📚 Documentation
+├── 📂 logs/                # 📋 System logs
+├── 📂 backups/config/      # 💾 Configuration backups
+├── 🐍 main.py              # 🚀 Main entry point
+└── ⚙️ .env                 # 🔧 Configuration file
+```
 
 ## 🏗️ Architettura
 

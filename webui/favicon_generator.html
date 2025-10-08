@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>RFID Gate - Favicon Generator</title>
+  </head>
+  <body>
+    <script>
+      // Crea un semplice favicon SVG per RFID Gate
+      const svgContent = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+                <rect width="16" height="16" fill="#2c3e50"/>
+                <rect x="2" y="2" width="12" height="12" fill="#3498db" rx="2"/>
+                <rect x="4" y="4" width="8" height="8" fill="#ecf0f1" rx="1"/>
+                <circle cx="8" cy="8" r="2" fill="#e74c3c"/>
+                <text x="8" y="9.5" text-anchor="middle" font-family="Arial" font-size="6" fill="white">R</text>
+            </svg>
+        `;
+
+      // Converte SVG in data URL per favicon
+      const svgDataUrl = "data:image/svg+xml;base64," + btoa(svgContent);
+
+      // Crea il link element per il favicon
+      const link = document.createElement("link");
+      link.rel = "icon";
+      link.type = "image/svg+xml";
+      link.href = svgDataUrl;
+      document.head.appendChild(link);
+
+      console.log("Favicon SVG generato per RFID Gate");
+      document.body.innerHTML =
+        "<h1>Favicon generato!</h1><p>Copia il contenuto SVG in un file favicon.ico</p><pre>" +
+        svgContent +
+        "</pre>";
+    </script>
+  </body>
+</html>

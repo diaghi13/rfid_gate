@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RFID Gate - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <h1><i class="fas fa-door-open"></i> RFID Gate System</h1>
+          <div class="user-info">
+            <span id="username">Admin</span>
+            <button onclick="logout()" class="btn btn-logout">
+              <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <a href="/" class="nav-item active">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="/control" class="nav-item">
+          <i class="fas fa-hand-pointer"></i> Controllo Manuale
+        </a>
+        <a href="/logs" class="nav-item">
+          <i class="fas fa-list"></i> Log Accessi
+        </a>
+        <a href="/config" class="nav-item">
+          <i class="fas fa-cog"></i> Configurazione
+        </a>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="main">
+        <!-- System Status Cards -->
+        <div class="status-grid">
+          <!-- System Status -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-server"></i> Sistema</h3>
+              <span class="status-indicator" id="system-status"></span>
+            </div>
+            <div class="card-content">
+              <div class="stat">
+                <span class="stat-label">Stato:</span>
+                <span class="stat-value" id="system-running"
+                  >In esecuzione</span
+                >
+              </div>
+              <div class="stat">
+                <span class="stat-label">Uptime:</span>
+                <span class="stat-value" id="system-uptime">-</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Memoria:</span>
+                <span class="stat-value" id="system-memory">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hardware Status -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-microchip"></i> Hardware</h3>
+              <span class="status-indicator" id="hardware-status"></span>
+            </div>
+            <div class="card-content">
+              <div id="readers-list">
+                <!-- Populated by JavaScript -->
+              </div>
+              <div class="stat">
+                <span class="stat-label">Relè:</span>
+                <span class="stat-value" id="relay-status">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Network Status -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-wifi"></i> Rete</h3>
+              <span class="status-indicator" id="network-status"></span>
+            </div>
+            <div class="card-content">
+              <div class="stat">
+                <span class="stat-label">MQTT:</span>
+                <span class="stat-value" id="mqtt-status">-</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Internet:</span>
+                <span class="stat-value" id="internet-status">-</span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Coda offline:</span>
+                <span class="stat-value" id="offline-queue">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Today's Statistics -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-chart-bar"></i> Statistiche Oggi</h3>
+            </div>
+            <div class="card-content">
+              <div class="stat-large">
+                <div class="stat-number" id="today-accesses">0</div>
+                <div class="stat-label">Accessi Totali</div>
+              </div>
+              <div class="stats-row">
+                <div class="stat-mini">
+                  <span class="stat-number green" id="today-authorized">0</span>
+                  <span class="stat-label">Autorizzati</span>
+                </div>
+                <div class="stat-mini">
+                  <span class="stat-number red" id="today-denied">0</span>
+                  <span class="stat-label">Negati</span>
+                </div>
+                <div class="stat-mini">
+                  <span class="stat-number blue" id="today-manual">0</span>
+                  <span class="stat-label">Manuali</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <h3><i class="fas fa-bolt"></i> Azioni Rapide</h3>
+          <div class="actions-grid">
+            <button onclick="quickOpen('in')" class="btn btn-success">
+              <i class="fas fa-arrow-right"></i> Apri Ingresso
+            </button>
+            <button onclick="quickOpen('out')" class="btn btn-warning">
+              <i class="fas fa-arrow-left"></i> Apri Uscita
+            </button>
+            <button onclick="refreshStatus()" class="btn btn-info">
+              <i class="fas fa-sync"></i> Aggiorna Stato
+            </button>
+            <button onclick="viewLogs()" class="btn btn-secondary">
+              <i class="fas fa-eye"></i> Visualizza Log
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="fas fa-history"></i> Attività Recente</h3>
+            <button onclick="refreshLogs()" class="btn btn-sm">
+              <i class="fas fa-sync"></i> Aggiorna
+            </button>
+          </div>
+          <div class="card-content">
+            <div class="logs-container" id="recent-logs">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+      // Demo Mode - Simulazione dati senza autenticazione
+      document.addEventListener("DOMContentLoaded", function () {
+        initDemoData();
+        simulateRealtimeUpdates();
+      });
+
+      function initDemoData() {
+        // Dati di esempio per la dashboard
+        const demoStats = {
+          cardsToday: 127,
+          errorsToday: 2,
+          manualOpens: 5,
+          totalAccess: 1852,
+        };
+
+        // Popola le statistiche
+        document.getElementById("today-cards").textContent =
+          demoStats.cardsToday;
+        document.getElementById("today-errors").textContent =
+          demoStats.errorsToday;
+        document.getElementById("today-manual").textContent =
+          demoStats.manualOpens;
+
+        // Simula log recenti
+        const recentLogs = [
+          {
+            time: "14:23:45",
+            event: "Accesso autorizzato",
+            card: "****4821",
+            gate: "Ingresso",
+          },
+          {
+            time: "14:21:12",
+            event: "Accesso autorizzato",
+            card: "****7651",
+            gate: "Uscita",
+          },
+          { time: "14:18:33", event: "Apertura manuale", gate: "Ingresso" },
+          {
+            time: "14:15:07",
+            event: "Accesso autorizzato",
+            card: "****2109",
+            gate: "Ingresso",
+          },
+          {
+            time: "14:12:55",
+            event: "Accesso autorizzato",
+            card: "****3847",
+            gate: "Uscita",
+          },
+        ];
+
+        const logsContainer = document.getElementById("recent-logs");
+        logsContainer.innerHTML = recentLogs
+          .map(
+            (log) => `
+          <div class="log-entry">
+            <span class="log-time">${log.time}</span>
+            <span class="log-event">${log.event}</span>
+            <span class="log-card">${log.card || ""}</span>
+            <span class="log-gate">${log.gate}</span>
+          </div>
+        `
+          )
+          .join("");
+
+        console.log("Dashboard Demo caricata con successo");
+      }
+
+      function simulateRealtimeUpdates() {
+        // Simula aggiornamenti in tempo reale ogni 10 secondi
+        setInterval(() => {
+          if (Math.random() > 0.7) {
+            const currentCards = parseInt(
+              document.getElementById("today-cards").textContent
+            );
+            document.getElementById("today-cards").textContent =
+              currentCards + 1;
+          }
+        }, 10000);
+      }
+
+      // Funzioni per i pulsanti (demo)
+      function quickOpen(direction) {
+        alert(
+          `Demo: Apertura ${
+            direction === "in" ? "ingresso" : "uscita"
+          } attivata!`
+        );
+      }
+
+      function refreshStatus() {
+        alert("Demo: Stato aggiornato!");
+      }
+
+      function viewLogs() {
+        window.location.href = "/demo-logs.html";
+      }
+
+      function refreshLogs() {
+        alert("Demo: Log aggiornati!");
+      }
+
+      function logout() {
+        window.location.href = "/demo-index.html";
+      }
+    </script>
+  </body>
+</html>

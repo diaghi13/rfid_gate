@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RFID Gate - Demo Mode</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <style>
+      .demo-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .page-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin: 2rem 0;
+      }
+      .page-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 2px solid transparent;
+      }
+      .page-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        border-color: var(--primary-color);
+      }
+      .page-card i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(
+          135deg,
+          var(--primary-color),
+          var(--accent-color)
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .page-card h3 {
+        color: var(--text-dark);
+        margin-bottom: 1rem;
+      }
+      .page-card p {
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+      }
+      .btn-demo {
+        background: linear-gradient(
+          135deg,
+          var(--primary-color),
+          var(--accent-color)
+        );
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 8px;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+        font-weight: 600;
+      }
+      .btn-demo:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="demo-banner">
+        <h1>
+          <i class="fas fa-shield-alt"></i> RFID Gate Web UI - Modalità Demo
+        </h1>
+        <p>Esplora tutte le funzionalità dell'interfaccia di gestione</p>
+      </div>
+
+      <div class="page-grid">
+        <div class="page-card">
+          <i class="fas fa-sign-in-alt"></i>
+          <h3>Login</h3>
+          <p>Pagina di autenticazione con design moderno e sicurezza JWT</p>
+          <a href="/templates/login.html" class="btn-demo">
+            <i class="fas fa-eye"></i> Visualizza
+          </a>
+        </div>
+
+        <div class="page-card">
+          <i class="fas fa-tachometer-alt"></i>
+          <h3>Dashboard</h3>
+          <p>Monitoraggio real-time del sistema con grafici e metriche</p>
+          <a href="/demo-dashboard.html" class="btn-demo">
+            <i class="fas fa-eye"></i> Visualizza Demo
+          </a>
+        </div>
+
+        <div class="page-card">
+          <i class="fas fa-sliders-h"></i>
+          <h3>Control Panel</h3>
+          <p>Controlli manuali del gate e funzioni di emergenza</p>
+          <a href="/demo-control.html" class="btn-demo">
+            <i class="fas fa-eye"></i> Visualizza Demo
+          </a>
+        </div>
+
+        <div class="page-card">
+          <i class="fas fa-list-alt"></i>
+          <h3>Log Viewer</h3>
+          <p>Visualizzazione avanzata dei log con filtri e export</p>
+          <a href="/demo-logs.html" class="btn-demo">
+            <i class="fas fa-eye"></i> Visualizza Demo
+          </a>
+        </div>
+
+        <div class="page-card">
+          <i class="fas fa-cog"></i>
+          <h3>Configuration</h3>
+          <p>Gestione completa della configurazione del sistema</p>
+          <a href="/demo-config.html" class="btn-demo">
+            <i class="fas fa-eye"></i> Visualizza Demo
+          </a>
+        </div>
+      </div>
+
+      <div
+        style="margin-top: 3rem; text-align: center; color: var(--text-muted)"
+      >
+        <p>
+          <i class="fas fa-info-circle"></i>
+          <strong>Modalità Demo:</strong> Tutte le funzionalità sono simulate
+          per la presentazione
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

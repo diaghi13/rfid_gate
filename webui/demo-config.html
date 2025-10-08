@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurazione - RFID Gate</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <h1><i class="fas fa-door-open"></i> RFID Gate System</h1>
+          <div class="user-info">
+            <span id="username">Admin</span>
+            <button onclick="logout()" class="btn btn-logout">
+              <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <a href="/" class="nav-item">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="/control" class="nav-item">
+          <i class="fas fa-hand-pointer"></i> Controllo Manuale
+        </a>
+        <a href="/logs" class="nav-item">
+          <i class="fas fa-list"></i> Log Accessi
+        </a>
+        <a href="/config" class="nav-item active">
+          <i class="fas fa-cog"></i> Configurazione
+        </a>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="main">
+        <!-- Configuration Form -->
+        <form id="config-form">
+          <!-- Readers Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-wifi"></i> Configurazione Lettori RFID</h3>
+              <button
+                type="button"
+                onclick="testReaders()"
+                class="btn btn-info btn-sm"
+              >
+                <i class="fas fa-vial"></i> Test Lettori
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="config-section">
+                <h4>Reader 1 (Primario)</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="reader1-type">Tipo Lettore:</label>
+                    <select
+                      id="reader1-type"
+                      name="reader1_type"
+                      class="form-control"
+                    >
+                      <option value="PN532" selected>PN532</option>
+                      <option value="MFRC522">MFRC522</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="reader1-interface">Interfaccia:</label>
+                    <select
+                      id="reader1-interface"
+                      name="reader1_interface"
+                      class="form-control"
+                    >
+                      <option value="I2C" selected>I2C</option>
+                      <option value="SPI">SPI</option>
+                      <option value="UART">UART</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="reader1-address">Indirizzo/Bus:</label>
+                    <input
+                      type="text"
+                      id="reader1-address"
+                      name="reader1_address"
+                      class="form-control"
+                      value="0x24"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="reader1-enabled">Abilitato:</label>
+                    <input
+                      type="checkbox"
+                      id="reader1-enabled"
+                      name="reader1_enabled"
+                      checked
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-section">
+                <h4>Reader 2 (Secondario)</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="reader2-type">Tipo Lettore:</label>
+                    <select
+                      id="reader2-type"
+                      name="reader2_type"
+                      class="form-control"
+                    >
+                      <option value="PN532" selected>PN532</option>
+                      <option value="MFRC522">MFRC522</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="reader2-interface">Interfaccia:</label>
+                    <select
+                      id="reader2-interface"
+                      name="reader2_interface"
+                      class="form-control"
+                    >
+                      <option value="I2C">I2C</option>
+                      <option value="SPI" selected>SPI</option>
+                      <option value="UART">UART</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="reader2-address">Indirizzo/Bus:</label>
+                    <input
+                      type="text"
+                      id="reader2-address"
+                      name="reader2_address"
+                      class="form-control"
+                      value="0"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="reader2-enabled">Abilitato:</label>
+                    <input
+                      type="checkbox"
+                      id="reader2-enabled"
+                      name="reader2_enabled"
+                      checked
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Network Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-network-wired"></i> Configurazione Rete</h3>
+              <button
+                type="button"
+                onclick="testConnection()"
+                class="btn btn-info btn-sm"
+              >
+                <i class="fas fa-wifi"></i> Test Connessione
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="config-section">
+                <h4>MQTT</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="mqtt-broker">Broker MQTT:</label>
+                    <input
+                      type="text"
+                      id="mqtt-broker"
+                      name="mqtt_broker"
+                      class="form-control"
+                      value="mqbrk.ddns.net"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="mqtt-port">Porta:</label>
+                    <input
+                      type="number"
+                      id="mqtt-port"
+                      name="mqtt_port"
+                      class="form-control"
+                      value="8883"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="mqtt-username">Username:</label>
+                    <input
+                      type="text"
+                      id="mqtt-username"
+                      name="mqtt_username"
+                      class="form-control"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="mqtt-password">Password:</label>
+                    <input
+                      type="password"
+                      id="mqtt-password"
+                      name="mqtt_password"
+                      class="form-control"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="mqtt-topic-prefix">Prefisso Topic:</label>
+                    <input
+                      type="text"
+                      id="mqtt-topic-prefix"
+                      name="mqtt_topic_prefix"
+                      class="form-control"
+                      value="tornello_01"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="mqtt-enabled">MQTT Abilitato:</label>
+                    <input
+                      type="checkbox"
+                      id="mqtt-enabled"
+                      name="mqtt_enabled"
+                      checked
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Security Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3>
+                <i class="fas fa-shield-alt"></i> Configurazione Sicurezza
+              </h3>
+            </div>
+            <div class="card-content">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="require-auth">Richiedi Autorizzazione:</label>
+                  <input
+                    type="checkbox"
+                    id="require-auth"
+                    name="require_authorization"
+                    checked
+                  />
+                  <small
+                    >Se disabilitato, tutti i tag RFID apriranno il
+                    tornello</small
+                  >
+                </div>
+                <div class="form-group">
+                  <label for="log-all-attempts">Log Tutti i Tentativi:</label>
+                  <input
+                    type="checkbox"
+                    id="log-all-attempts"
+                    name="log_all_attempts"
+                    checked
+                  />
+                  <small>Registra anche i tentativi negati</small>
+                </div>
+                <div class="form-group">
+                  <label for="offline-mode">Modalità Offline:</label>
+                  <input
+                    type="checkbox"
+                    id="offline-mode"
+                    name="offline_mode_enabled"
+                    checked
+                  />
+                  <small>Abilita funzionamento senza internet</small>
+                </div>
+                <div class="form-group">
+                  <label for="auto-lock-timeout"
+                    >Timeout Auto-Blocco (min):</label
+                  >
+                  <input
+                    type="number"
+                    id="auto-lock-timeout"
+                    name="auto_lock_timeout"
+                    class="form-control"
+                    value="30"
+                    min="1"
+                    max="120"
+                  />
+                  <small>Blocca automaticamente dopo inattività</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Configuration -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-cogs"></i> Configurazione Sistema</h3>
+            </div>
+            <div class="card-content">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="gate-open-duration">Durata Apertura (sec):</label>
+                  <input
+                    type="number"
+                    id="gate-open-duration"
+                    name="gate_open_duration"
+                    class="form-control"
+                    value="3"
+                    min="1"
+                    max="10"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="read-timeout">Timeout Lettura (sec):</label>
+                  <input
+                    type="number"
+                    id="read-timeout"
+                    name="read_timeout"
+                    class="form-control"
+                    value="5"
+                    min="1"
+                    max="30"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="relay-pin">Pin Relè:</label>
+                  <input
+                    type="number"
+                    id="relay-pin"
+                    name="relay_pin"
+                    class="form-control"
+                    value="18"
+                    min="1"
+                    max="40"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="debug-mode">Modalità Debug:</label>
+                  <input type="checkbox" id="debug-mode" name="debug_mode" />
+                  <small>Abilita log dettagliati</small>
+                </div>
+                <div class="form-group">
+                  <label for="auto-restart">Auto Restart Sistema:</label>
+                  <input
+                    type="checkbox"
+                    id="auto-restart"
+                    name="auto_restart"
+                    checked
+                  />
+                  <small>Riavvia automaticamente in caso di errore</small>
+                </div>
+                <div class="form-group">
+                  <label for="log-retention">Retention Log (giorni):</label>
+                  <input
+                    type="number"
+                    id="log-retention"
+                    name="log_retention_days"
+                    class="form-control"
+                    value="30"
+                    min="1"
+                    max="365"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="config-actions">
+            <button type="submit" class="btn btn-success">
+              <i class="fas fa-save"></i> Salva Configurazione
+            </button>
+            <button
+              type="button"
+              onclick="resetToDefaults()"
+              class="btn btn-warning"
+            >
+              <i class="fas fa-undo"></i> Ripristina Default
+            </button>
+            <button type="button" onclick="exportConfig()" class="btn btn-info">
+              <i class="fas fa-download"></i> Esporta Config
+            </button>
+            <button
+              type="button"
+              onclick="importConfig()"
+              class="btn btn-secondary"
+            >
+              <i class="fas fa-upload"></i> Importa Config
+            </button>
+          </div>
+        </form>
+
+        <!-- System Status -->
+        <div class="card">
+          <div class="card-header">
+            <h3><i class="fas fa-info-circle"></i> Stato Sistema</h3>
+            <button onclick="restartSystem()" class="btn btn-danger btn-sm">
+              <i class="fas fa-power-off"></i> Riavvia Sistema
+            </button>
+          </div>
+          <div class="card-content">
+            <div class="system-status">
+              <div class="status-item">
+                <i class="fas fa-server status-icon"></i>
+                <div class="status-info">
+                  <div class="status-label">Servizio Principal</div>
+                  <div class="status-value" id="main-service-status">
+                    In esecuzione
+                  </div>
+                </div>
+              </div>
+              <div class="status-item">
+                <i class="fas fa-wifi status-icon"></i>
+                <div class="status-info">
+                  <div class="status-label">Connessione MQTT</div>
+                  <div class="status-value" id="mqtt-connection-status">
+                    Connesso
+                  </div>
+                </div>
+              </div>
+              <div class="status-item">
+                <i class="fas fa-microchip status-icon"></i>
+                <div class="status-info">
+                  <div class="status-label">Lettori RFID</div>
+                  <div class="status-value" id="readers-status">2 attivi</div>
+                </div>
+              </div>
+              <div class="status-item">
+                <i class="fas fa-file-alt status-icon"></i>
+                <div class="status-info">
+                  <div class="status-label">File di Config</div>
+                  <div class="status-value" id="config-file-status">Valido</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- File Import Modal -->
+    <div id="import-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="fas fa-upload"></i> Importa Configurazione</h3>
+          <button onclick="closeImportModal()" class="btn btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="file-upload">
+            <input
+              type="file"
+              id="config-file"
+              accept=".json,.env"
+              style="display: none"
+            />
+            <button
+              onclick="document.getElementById('config-file').click()"
+              class="btn btn-primary"
+            >
+              <i class="fas fa-file-upload"></i> Scegli File
+            </button>
+            <p id="file-name">Nessun file selezionato</p>
+          </div>
+          <div class="import-options">
+            <label>
+              <input type="checkbox" id="backup-current" checked />
+              Backup configurazione attuale
+            </label>
+            <label>
+              <input type="checkbox" id="restart-after-import" checked />
+              Riavvia sistema dopo l'importazione
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button onclick="closeImportModal()" class="btn btn-secondary">
+            Annulla
+          </button>
+          <button
+            onclick="processImport()"
+            class="btn btn-success"
+            id="import-btn"
+            disabled
+          >
+            <i class="fas fa-upload"></i> Importa
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+      // Demo Mode - Configurazione simulata
+      document.addEventListener("DOMContentLoaded", function () {
+        initDemoConfig();
+      });
+      
+      function initDemoConfig() {
+        // Popola con dati demo predefiniti
+        loadDemoConfig();
+        setupDemoEventListeners();
+        console.log("Configurazione Demo caricata");
+      }
+      
+      function loadDemoConfig() {
+        // Dati demo preconfigurati
+        document.getElementById("reader1-type").value = "PN532";
+        document.getElementById("reader1-interface").value = "I2C";
+        document.getElementById("reader1-address").value = "0x24";
+        document.getElementById("reader1-enabled").checked = true;
+        
+        document.getElementById("reader2-type").value = "MFRC522";
+        document.getElementById("reader2-interface").value = "SPI";
+        document.getElementById("reader2-address").value = "0";
+        document.getElementById("reader2-enabled").checked = true;
+        
+        document.getElementById("mqtt-broker").value = "mqtt.example.com";
+        document.getElementById("mqtt-port").value = "1883";
+        document.getElementById("mqtt-username").value = "rfid_user";
+        document.getElementById("mqtt-topic-prefix").value = "gate/tornello_01";
+        document.getElementById("mqtt-enabled").checked = true;
+        
+        document.getElementById("require-auth").checked = true;
+        document.getElementById("log-all-attempts").checked = true;
+        document.getElementById("offline-mode").checked = true;
+        document.getElementById("auto-lock-timeout").value = "30";
+        
+        document.getElementById("gate-open-duration").value = "3";
+        document.getElementById("read-timeout").value = "5";
+        document.getElementById("relay-pin").value = "18";
+        document.getElementById("debug-mode").checked = false;
+        document.getElementById("auto-restart").checked = true;
+        document.getElementById("log-retention").value = "30";
+      }
+      
+      function setupDemoEventListeners() {
+        // Form submission demo
+        document.getElementById("config-form").addEventListener("submit", function(e) {
+          e.preventDefault();
+          saveConfigDemo();
+        });
+        
+        // File input demo
+        document.getElementById("config-file").addEventListener("change", function(e) {
+          const file = e.target.files[0];
+          if (file) {
+            document.getElementById("file-name").textContent = file.name;
+            document.getElementById("import-btn").disabled = false;
+          } else {
+            document.getElementById("file-name").textContent = "Nessun file selezionato";
+            document.getElementById("import-btn").disabled = true;
+          }
+        });
+      }
+      
+      // Funzioni demo per i pulsanti
+      function saveConfigDemo() {
+        // Raccogli i dati del form
+        const formData = new FormData(document.getElementById('config-form'));
+        const config = {};
+        
+        // Simula la raccolta dati come farebbe l'API reale
+        config.readers = {
+          reader_1: {
+            type: formData.get('reader1_type'),
+            interface: formData.get('reader1_interface'),
+            address: formData.get('reader1_address'),
+            enabled: formData.has('reader1_enabled')
+          },
+          reader_2: {
+            type: formData.get('reader2_type'), 
+            interface: formData.get('reader2_interface'),
+            address: formData.get('reader2_address'),
+            enabled: formData.has('reader2_enabled')
+          }
+        };
+        
+        config.network = {
+          mqtt_broker: formData.get('mqtt_broker'),
+          mqtt_port: parseInt(formData.get('mqtt_port')),
+          mqtt_username: formData.get('mqtt_username'),
+          mqtt_password: formData.get('mqtt_password'),
+          mqtt_topic_prefix: formData.get('mqtt_topic_prefix'),
+          mqtt_enabled: formData.has('mqtt_enabled')
+        };
+        
+        config.security = {
+          require_authorization: formData.has('require_authorization'),
+          log_all_attempts: formData.has('log_all_attempts'),
+          offline_mode_enabled: formData.has('offline_mode_enabled'),
+          auto_lock_timeout: parseInt(formData.get('auto_lock_timeout'))
+        };
+        
+        config.system = {
+          gate_open_duration: parseInt(formData.get('gate_open_duration')),
+          read_timeout: parseInt(formData.get('read_timeout')),
+          relay_pin: parseInt(formData.get('relay_pin')),
+          debug_mode: formData.has('debug_mode'),
+          auto_restart: formData.has('auto_restart'),
+          log_retention_days: parseInt(formData.get('log_retention_days'))
+        };
+        
+        console.log("Demo: Configurazione da salvare:", config);
+        
+        alert(`Demo: Configurazione salvata con successo!
+
+📝 COSA SUCCEDE NEL SISTEMA REALE:
+
+1. 🔄 I dati del form vengono inviati all'API /api/config
+2. 📄 Il ConfigManager legge il file .env attuale
+3. 💾 Viene creato un backup automatico (.env_backup_TIMESTAMP)
+4. ✍️ Il file .env viene aggiornato con i nuovi valori
+5. 🔧 Le variabili vengono mappate correttamente:
+   • MQTT_BROKER=${config.network.mqtt_broker}
+   • RFID_IN_READER_TYPE=${config.readers.reader_1.type.toLowerCase()}
+   • RELAY_OPEN_TIME=${config.system.gate_open_duration}
+   • AUTH_ENABLED=${config.security.require_authorization}
+   • LOG_LEVEL=${config.system.debug_mode ? 'DEBUG' : 'INFO'}
+   
+6. ✅ Il sistema conferma il salvataggio
+7. 🔄 Eventuali servizi vengono riavviati per applicare le modifiche
+
+In questa demo, la configurazione viene solo simulata.`);
+      }
+      
+      function testReaders() {
+        alert("Demo: Test lettori RFID avviato!\n\nReader 1 (PN532): ✅ Attivo\nReader 2 (MFRC522): ✅ Attivo");
+      }
+      
+      function testConnection() {
+        alert("Demo: Test connessione di rete avviato!\n\nMQTT Broker: ✅ Connesso\nInternet: ✅ Disponibile");
+      }
+      
+      function resetToDefaults() {
+        if (confirm("Demo: Ripristinare la configurazione ai valori di default?")) {
+          loadDemoConfig();
+          alert("Demo: Configurazione ripristinata ai default!");
+        }
+      }
+      
+      function exportConfig() {
+        alert(`Demo: Configurazione esportata!
+
+📥 NEL SISTEMA REALE:
+1. La configurazione attuale viene letta dal file .env
+2. Viene creato un file JSON con tutti i parametri
+3. Il file viene scaricato automaticamente
+4. Include timestamp e versione del sistema
+
+🗂️ BACKUP DISPONIBILI:
+- .env_backup_20251008_112426 (Oggi 11:24)
+- .env_backup_20251007_091523 (Ieri 09:15) 
+- .env_backup_20251006_164420 (2 giorni fa)
+
+I backup vengono creati automaticamente ad ogni modifica!`);
+      }
+      
+      function importConfig() {
+        document.getElementById("import-modal").style.display = "flex";
+      }
+      
+      function closeImportModal() {
+        document.getElementById("import-modal").style.display = "none";
+        document.getElementById("config-file").value = "";
+        document.getElementById("file-name").textContent = "Nessun file selezionato";
+        document.getElementById("import-btn").disabled = true;
+      }
+      
+      function processImport() {
+        alert("Demo: Configurazione importata con successo!\n\nIn un sistema reale, le nuove impostazioni verrebbero applicate.");
+        closeImportModal();
+      }
+      
+      function restartSystem() {
+        if (confirm("Demo: Riavviare il sistema RFID Gate?")) {
+          alert("Demo: Sistema in riavvio...\n\nIn un sistema reale, il dispositivo verrebbe riavviato per applicare le modifiche.");
+        }
+      }
+      
+      function logout() {
+        window.location.href = '/demo-index.html';
+      }
+    </script>
+  </body>
+</html>
+            populateForm(config);
+            closeImportModal();
+            showToast(
+              "Configurazione importata. Ricorda di salvare!",
+              "success"
+            );
+          } catch (error) {
+            showToast("File di configurazione non valido", "error");
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      async function testReaders() {
+        showToast("Test lettori in corso...", "info");
+
+        // Mock test - in real implementation would call API
+        setTimeout(() => {
+          showToast("Test lettori completato: 2/2 funzionanti", "success");
+        }, 2000);
+      }
+
+      async function testConnection() {
+        showToast("Test connessione in corso...", "info");
+
+        // Mock test - in real implementation would call API
+        setTimeout(() => {
+          showToast("Connessione MQTT: OK, Internet: OK", "success");
+        }, 1500);
+      }
+
+      async function restartSystem() {
+        const confirmed = confirm(
+          "Riavviare il sistema RFID Gate? Il servizio sarà temporaneamente non disponibile."
+        );
+        if (!confirmed) return;
+
+        showToast("Riavvio sistema in corso...", "warning");
+
+        // Mock restart - in real implementation would call API
+        setTimeout(() => {
+          showToast("Sistema riavviato con successo", "success");
+        }, 5000);
+      }
+    </script>
+  </body>
+</html>

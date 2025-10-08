@@ -40,6 +40,7 @@ sys.path.insert(0, str(parent_dir))
 from rfid_gate import AccessControlSystem, RFIDGateConfig
 from rfid_gate.config.settings import Config
 from rfid_gate.logging.logger import AccessLogger
+from config_manager import ConfigManager
 
 
 # ==============================================================================
@@ -411,28 +412,60 @@ async def get_config(current_user: dict = Depends(verify_token)):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        # Read current config
+        # Inizializza ConfigManager
+        config_manager = ConfigManager()
+        
+        # Carica configurazione attuale dal .env
+        env_config = config_manager.load_env_config()
+        
+        # Organizza in sezioni per la Web UI
+        sections = config_manager.get_config_sections()
+        
+        # Mappa la configurazione nel formato atteso dalla Web UI
         config_data = {
             "readers": {
-                "reader_1": {"type": "PN532", "interface": "I2C", "address": "0x24"},
-                "reader_2": {"type": "MFRC522", "interface": "SPI", "bus": 0}
+                "reader_1": {
+                    "type": env_config.get("RFID_IN_READER_TYPE", "PN532"),
+                    "interface": env_config.get("RFID_IN_PN532_INTERFACE", "I2C"),
+                    "address": env_config.get("RFID_IN_PN532_I2C_ADDRESS", "0x24"),
+                    "enabled": env_config.get("RFID_IN_ENABLE", "True").lower() == "true"
+                },
+                "reader_2": {
+                    "type": env_config.get("RFID_OUT_READER_TYPE", "PN532"),
+                    "interface": env_config.get("RFID_OUT_PN532_INTERFACE", "SPI"),
+                    "bus": env_config.get("RFID_OUT_PN532_SPI_BUS", "0"),
+                    "enabled": env_config.get("RFID_OUT_ENABLE", "True").lower() == "true"
+                }
             },
             "network": {
-                "mqtt_broker": "mqtt.example.com",
-                "mqtt_port": 1883,
-                "mqtt_topic_prefix": "gate/tornello_01"
+                "mqtt_broker": env_config.get("MQTT_BROKER", ""),
+                "mqtt_port": int(env_config.get("MQTT_PORT", "1883")),
+                "mqtt_username": env_config.get("MQTT_USERNAME", ""),
+                "mqtt_topic_prefix": env_config.get("MQTT_CARD_READ_TOPIC", "").replace("/card_read", ""),
+                "mqtt_enabled": env_config.get("MQTT_BROKER", "") != ""
             },
             "security": {
-                "require_authorization": True,
-                "log_all_attempts": True,
-                "offline_mode_enabled": True
-            }
+                "require_authorization": env_config.get("AUTH_ENABLED", "True").lower() == "true",
+                "log_all_attempts": env_config.get("LOG_LEVEL", "INFO") == "DEBUG",
+                "offline_mode_enabled": env_config.get("OFFLINE_MODE_ENABLED", "True").lower() == "true",
+                "auto_lock_timeout": int(env_config.get("AUTH_TIMEOUT", "10"))
+            },
+            "system": {
+                "gate_open_duration": float(env_config.get("RELAY_OPEN_TIME", "3.0")),
+                "read_timeout": int(env_config.get("AUTH_TIMEOUT", "5")),
+                "relay_pin": int(env_config.get("RELAY_IN_PIN", "18")),
+                "debug_mode": env_config.get("LOG_LEVEL", "INFO") == "DEBUG",
+                "auto_restart": True,  # Non configurabile via .env
+                "log_retention_days": int(env_config.get("LOG_RETENTION_DAYS", "30"))
+            },
+            "_raw_config": env_config,  # Configurazione grezza per debug
+            "_sections": sections  # Sezioni organizzate
         }
         
         return config_data
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Errore caricamento configurazione: {str(e)}")
 
 
 @app.post("/api/config")
@@ -444,13 +477,134 @@ async def update_config(request: Request, current_user: dict = Depends(verify_to
     try:
         config_data = await request.json()
         
-        # Here you would save the configuration
-        # and restart necessary services
+        # Inizializza ConfigManager
+        config_manager = ConfigManager()
         
-        await manager.broadcast("config_updated")
+        # Mappa la configurazione Web UI nel formato .env
+        env_updates = {}
         
-        return {"success": True, "message": "Configuration updated successfully"}
+        # Readers configuration
+        if "readers" in config_data:
+            readers = config_data["readers"]
+            
+            if "reader_1" in readers:
+                r1 = readers["reader_1"]
+                env_updates["RFID_IN_READER_TYPE"] = r1.get("type", "PN532").lower()
+                env_updates["RFID_IN_PN532_INTERFACE"] = r1.get("interface", "I2C").lower()
+                env_updates["RFID_IN_PN532_I2C_ADDRESS"] = r1.get("address", "0x24")
+                env_updates["RFID_IN_ENABLE"] = str(r1.get("enabled", True))
+            
+            if "reader_2" in readers:
+                r2 = readers["reader_2"]
+                env_updates["RFID_OUT_READER_TYPE"] = r2.get("type", "PN532").lower()
+                env_updates["RFID_OUT_PN532_INTERFACE"] = r2.get("interface", "SPI").lower()
+                env_updates["RFID_OUT_PN532_SPI_BUS"] = str(r2.get("bus", "0"))
+                env_updates["RFID_OUT_ENABLE"] = str(r2.get("enabled", True))
         
+        # Network configuration
+        if "network" in config_data:
+            network = config_data["network"]
+            env_updates["MQTT_BROKER"] = network.get("mqtt_broker", "")
+            env_updates["MQTT_PORT"] = str(network.get("mqtt_port", 1883))
+            env_updates["MQTT_USERNAME"] = network.get("mqtt_username", "")
+            
+            # Password solo se fornita (non sovrascrive se vuota)
+            if network.get("mqtt_password"):
+                env_updates["MQTT_PASSWORD"] = network["mqtt_password"]
+            
+            # Topic prefix
+            topic_prefix = network.get("mqtt_topic_prefix", "rfid_gate")
+            env_updates["MQTT_CARD_READ_TOPIC"] = f"{topic_prefix}/card_read"
+            env_updates["MQTT_AUTH_RESPONSE_TOPIC"] = f"{topic_prefix}/auth_response"
+            env_updates["MQTT_MANUAL_OPEN_TOPIC"] = f"{topic_prefix}/manual_open"
+        
+        # Security configuration
+        if "security" in config_data:
+            security = config_data["security"]
+            env_updates["AUTH_ENABLED"] = str(security.get("require_authorization", True))
+            env_updates["OFFLINE_MODE_ENABLED"] = str(security.get("offline_mode_enabled", True))
+            env_updates["AUTH_TIMEOUT"] = str(security.get("auto_lock_timeout", 10))
+        
+        # System configuration
+        if "system" in config_data:
+            system = config_data["system"]
+            env_updates["RELAY_OPEN_TIME"] = str(system.get("gate_open_duration", 3.0))
+            env_updates["RELAY_IN_PIN"] = str(system.get("relay_pin", 18))
+            env_updates["LOG_RETENTION_DAYS"] = str(system.get("log_retention_days", 30))
+            
+            # Debug mode
+            if system.get("debug_mode", False):
+                env_updates["LOG_LEVEL"] = "DEBUG"
+            else:
+                env_updates["LOG_LEVEL"] = "INFO"
+        
+        # Valida la configurazione
+        validation_errors = config_manager.validate_config(env_updates)
+        if validation_errors:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "errors": validation_errors}
+            )
+        
+        # Salva la configurazione nel file .env
+        success = config_manager.save_env_config(env_updates, create_backup=True)
+        
+        if success:
+            # Notifica aggiornamento via WebSocket
+            await manager.broadcast({
+                "type": "config_updated",
+                "message": "Configurazione aggiornata con successo",
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            return {
+                "success": True, 
+                "message": "Configurazione salvata nel file .env con successo",
+                "backup_created": True,
+                "updated_keys": list(env_updates.keys())
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Errore durante il salvataggio della configurazione")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore aggiornamento configurazione: {str(e)}")
+
+
+@app.get("/api/config/backups")
+async def get_config_backups(current_user: dict = Depends(verify_token)):
+    """Get list of configuration backups"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        config_manager = ConfigManager()
+        backups = config_manager.get_backup_list()
+        return {"backups": backups}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/config/restore/{backup_filename}")
+async def restore_config_backup(backup_filename: str, current_user: dict = Depends(verify_token)):
+    """Restore configuration from backup"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        config_manager = ConfigManager()
+        success = config_manager.restore_backup(backup_filename)
+        
+        if success:
+            await manager.broadcast({
+                "type": "config_restored",
+                "message": f"Configurazione ripristinata da backup: {backup_filename}",
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            return {"success": True, "message": "Configurazione ripristinata con successo"}
+        else:
+            raise HTTPException(status_code=500, detail="Errore durante il ripristino")
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

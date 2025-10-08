@@ -104,29 +104,33 @@
           loginBtn.disabled = true;
 
           try {
-            const response = await fetch("/api/auth/login", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ username, password }),
-            });
+            // Demo mode - simulate login without backend
+            if (username === "admin" && password === "admin123") {
+              // Save demo token and user
+              localStorage.setItem("access_token", "demo-token-12345");
+              localStorage.setItem(
+                "user",
+                JSON.stringify({
+                  username: "admin",
+                  role: "administrator",
+                  name: "Demo Admin",
+                })
+              );
 
-            const data = await response.json();
-
-            if (response.ok) {
-              // Save token
-              localStorage.setItem("access_token", data.access_token);
-              localStorage.setItem("user", JSON.stringify(data.user));
-
-              showToast("Accesso effettuato con successo!", "success");
+              showToast(
+                "Accesso effettuato con successo! (Demo Mode)",
+                "success"
+              );
 
               // Redirect to dashboard
               setTimeout(() => {
-                window.location.href = "/";
+                window.location.href = "/templates/dashboard.html";
               }, 1000);
             } else {
-              showToast(data.detail || "Errore durante l'accesso", "error");
+              showToast(
+                "Credenziali non valide. Usa: admin / admin123",
+                "error"
+              );
             }
           } catch (error) {
             showToast("Errore di connessione", "error");
@@ -138,20 +142,12 @@
           }
         });
 
-      // Check if already logged in
+      // Check if already logged in (demo mode)
       document.addEventListener("DOMContentLoaded", function () {
         const token = localStorage.getItem("access_token");
-        if (token) {
-          // Verify token is still valid
-          fetch("/api/system/status", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }).then((response) => {
-            if (response.ok) {
-              window.location.href = "/";
-            }
-          });
+        if (token === "demo-token-12345") {
+          // Already logged in, redirect to dashboard
+          window.location.href = "/templates/dashboard.html";
         }
       });
     </script>

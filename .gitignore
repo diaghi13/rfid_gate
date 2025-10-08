@@ -96,15 +96,39 @@ access_log.json
 access_log.csv
 system.log
 
+# 🌐 WebUI specific
+webui/uploads/
+webui/sessions/
+webui/*.pid
+webui/static/uploads/
+
 # 🔄 Temporary files
 tmp/
 temp/
 *.tmp
 *.bak
 *.backup
+# Specifici file temporanei del refactor (non tutti i test_*.py!)
+sync_demo_with_env.py
+test_integration.py
+test_webui_final.py
+test_post_refactor.py
+DEMO_SYNC_REPORT.md
+WEBUI_ENV_INTEGRATION.md
+REFACTOR_PLAN.md
 
 # 📊 Data files
 data/
 *.db
 *.sqlite
 *.sqlite3
+
+# 🗂️ Mantenere archive/ per rollback di emergenza
+# archive/ - MANTENIAMO per ripristino versione precedente
+old_*/
+legacy/
+deprecated/
+
+# 📦 Backup directories (keep only config backups)
+backups/test_backup_*
+backups/old_*
