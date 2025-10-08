@@ -12,11 +12,11 @@ Sistema completo per controllo tornelli con tecnologia RFID, progettato per Rasp
 🔹 **Multi-Reader Support**: MFRC522 (SPI) e PN532 (I2C/SPI/UART)  
 🔹 **Interfaccia Web**: Dashboard moderna con controllo real-time  
 🔹 **MQTT Integration**: Comunicazione IoT con broker esterni  
-� **Modalità Offline**: Funzionamento autonomo con sincronizzazione  
+🔹 **Modalità Offline**: Funzionamento autonomo con sincronizzazione  
 🔹 **Installazione Automatica**: Script completi per setup Nginx/SSL  
 🔹 **Sistema Modulare**: Architettura scalabile e manutenibile  
 
-## �🚀 Quick Start
+## 🚀 Quick Start
 
 ### **🎯 Installazione Automatica**
 
@@ -148,7 +148,7 @@ rfid_gate/
 ## 📚 Documentazione
 
 ### 📖 **Guide Complete**
-- � **[Installazione Web UI](docs/WEBUI_INSTALLATION.md)** - Setup completo WebUI con Nginx e SSL
+- 🌐 **[Installazione Web UI](docs/WEBUI_INSTALLATION.md)** - Setup completo WebUI con Nginx e SSL
 - ⚙️ **[Esempi Configurazione](docs/CONFIGURATION_EXAMPLES.md)** - Configurazioni per diversi scenari
 - 🎮 **[Controllo Manuale](docs/MANUAL_CONTROL.md)** - Apertura manuale e comandi
 - 📡 **[Sistema Offline](docs/OFFLINE_SYSTEM.md)** - Funzionamento senza connessione
