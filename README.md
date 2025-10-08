@@ -1,12 +1,22 @@
-# 🎯 RFID Gate System - Refactored Architecture
+# 🚪 RFID Gate Control System
 
-Sistema di controllo accessi RFID moderno con architettura modulare.
+Sistema completo per controllo tornelli con tecnologia RFID, progettato per Raspberry Pi con supporto per multiple interfacce hardware e gestione avanzata.
 
 [![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://python.org)
 [![Tests](https://img.shields.io/badge/Tests-100%25%20Pass-green.svg)](tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-Async%20Modular-brightgreen.svg)](#architettura)
+[![WebUI](https://img.shields.io/badge/WebUI-FastAPI-orange.svg)](#web-interface)
 
-## 🚀 Quick Start
+## ✨ Caratteristiche Principali
+
+🔹 **Multi-Reader Support**: MFRC522 (SPI) e PN532 (I2C/SPI/UART)  
+🔹 **Interfaccia Web**: Dashboard moderna con controllo real-time  
+🔹 **MQTT Integration**: Comunicazione IoT con broker esterni  
+� **Modalità Offline**: Funzionamento autonomo con sincronizzazione  
+🔹 **Installazione Automatica**: Script completi per setup Nginx/SSL  
+🔹 **Sistema Modulare**: Architettura scalabile e manutenibile  
+
+## �🚀 Quick Start
 
 ### **🎯 Installazione Automatica**
 
@@ -22,22 +32,62 @@ sudo bash scripts/install.sh
 # 3️⃣ Sistema avanzato (+ Nginx + SSL)
 ```
 
-### **Sistema Principale**
+### **📋 Requisiti Hardware**
+
+| Componente | Specifiche | Note |
+|------------|------------|------|
+| **SBC** | Raspberry Pi 3B+ o superiore | ARM64 raccomandato |
+| **Lettore RFID** | MFRC522 o PN532 | Supporto multi-interface |
+| **Relè** | 5V compatibile GPIO | Per controllo tornello |
+| **Alimentazione** | 5V 3A minimo | Considerare carico relè |
+
+### **🔧 Configurazione Rapida**
+
+1. **Setup iniziale**:
+   ```bash
+   cp .env.example .env
+   nano .env  # Configura secondo il tuo hardware
+   ```
+
+2. **Avvia sistema principale**:
+   ```bash
+   python3 main.py
+   ```
+
+3. **Test del sistema**:
+   ```bash
+   python3 tests/test_refactored_system.py
+   ```
+
+### **🌐 Web UI Dashboard**
 
 ```bash
-# Avvia il sistema
-python3 main.py
+# Avvia server di sviluppo
+cd webui && python3 app_demo.py
+# Dashboard: http://localhost:8080
 
-# Test del sistema
-python3 tests/test_refactored_system.py
+# Avvia server di produzione (con Gunicorn)
+cd webui && gunicorn -c gunicorn.conf.py app:app
+# Dashboard: http://localhost:8000
 ```
 
-### **🌐 Web UI (Nuovo!)**
+**Funzionalità Web UI:**
+- 📊 Dashboard real-time con stato sistema
+- ⚙️ Configurazione .env tramite interfaccia grafica  
+- 📋 Log di accesso e monitoraggio eventi
+- 🎮 Controllo manuale tornello
+- 🔧 Diagnostica lettori RFID
 
-```bash
-# Avvia server FastAPI completo
-cd webui && python3 app_demo.py
-# Server: http://localhost:8080
+## 📍 Navigazione Rapida
+
+| Sezione | Descrizione | Link |
+|---------|-------------|------|
+| 🏗️ **Architettura** | Struttura modulare del sistema | [⬇️ Vai alla sezione](#️-architettura-modulare) |
+| 📚 **Documentazione** | Guide complete e tutorial | [⬇️ Vai alla sezione](#-documentazione) |
+| 🌐 **Web UI Setup** | Installazione interfaccia web | [📖 Guida completa](docs/WEBUI_INSTALLATION.md) |
+| ⚙️ **Configurazione** | Esempi di configurazione | [📖 Configuration Guide](docs/CONFIGURATION_EXAMPLES.md) |
+| 🧪 **Testing** | Test e validazione | [⬇️ Vai alla sezione](#testing) |
+| 🔧 **Troubleshooting** | Risoluzione problemi | [📖 Troubleshooting](docs/PN532_QUICK_GUIDE.md) |
 
 # Oppure server demo semplice
 cd webui && python3 simple_server.py
@@ -95,39 +145,68 @@ rfid_gate/
 └── ⚙️ .env                 # 🔧 Configuration file
 ```
 
-## 🏗️ Architettura
+## 📚 Documentazione
 
+### 📖 **Guide Complete**
+- � **[Installazione Web UI](docs/WEBUI_INSTALLATION.md)** - Setup completo WebUI con Nginx e SSL
+- ⚙️ **[Esempi Configurazione](docs/CONFIGURATION_EXAMPLES.md)** - Configurazioni per diversi scenari
+- 🎮 **[Controllo Manuale](docs/MANUAL_CONTROL.md)** - Apertura manuale e comandi
+- 📡 **[Sistema Offline](docs/OFFLINE_SYSTEM.md)** - Funzionamento senza connessione
+- 🔧 **[Guida PN532](docs/PN532_QUICK_GUIDE.md)** - Setup rapido lettori PN532
+
+### 🛠️ **Script e Tool**
+- 📦 **[Scripts di Installazione](scripts/)** - Installazione automatica completa
+- 🔧 **[Tool di Gestione](tools/)** - Utility per manutenzione e debug
+- 🧪 **[Test Suite](tests/)** - Test automatizzati e validazione
+
+## 🏗️ Architettura Modulare
+
+### 🎯 **Core Business Logic**
+```
+rfid_gate/core/
+├── access_control.py      # Sistema controllo accessi centrale
+├── gate_manager.py        # Gestione stato tornello
+└── authentication.py     # Logica autenticazione RFID
 ```
 
+### 🔌 **Hardware Abstraction Layer**
+```
+rfid_gate/hardware/
+├── readers/               # 📡 Lettori RFID
+│   ├── base.py           # Interfaccia comune
+│   ├── mfrc522.py        # Reader MFRC522
+│   ├── pn532.py          # Reader PN532 multi-interface
+│   └── factory.py        # Factory pattern per reader
+└── relays/               # ⚡ Controller Relè
+    ├── base.py           # Interfaccia comune  
+    └── gpio.py           # GPIO Raspberry Pi
 ```
 
-rfid_gate/
-├── core/ # 🎯 Business Logic
-│ └── access_control.py # Sistema controllo accessi centrale
-├── hardware/ # 🔌 Hardware Abstraction
-│ ├── readers/ # 📡 Lettori RFID
-│ │ ├── base.py # Interfaccia comune
-│ │ ├── mfrc522.py # Reader MFRC522
-│ │ ├── pn532.py # Reader PN532
-│ │ └── factory.py # Factory pattern
-│ └── relays/ # ⚡ Controller Relè
-│ ├── base.py # Interfaccia comune
-│ └── gpio.py # GPIO Raspberry Pi
-├── network/ # 🌐 Comunicazione
-│ └── mqtt.py # Client MQTT asincrono
-├── config/ # ⚙️ Configurazione
-│ └── settings.py # Type-safe configuration
-├── utils/ # 🛠️ Utilità
-│ └── debounce.py # Debounce globale
-├── webui/ # 🌐 Web Interface (Nuovo!)
-│ ├── app.py # FastAPI server
-│ ├── start.py # Script avvio
-│ ├── templates/ # Template HTML
-│ ├── static/ # CSS/JS assets
-│ └── README.md # Documentazione Web UI
-
+### 🌐 **Network & Communication**
 ```
-└── logging/                # 📊 Logging avanzato
+rfid_gate/network/
+├── mqtt.py               # Client MQTT asincrono
+├── api_client.py         # Client API REST
+└── websocket.py          # WebSocket real-time
+```
+
+### ⚙️ **Configuration Management**
+```
+rfid_gate/config/
+├── settings.py           # Type-safe configuration
+├── validation.py         # Validazione configurazioni
+└── migration.py          # Migrazione configurazioni legacy
+```
+
+### 🌐 **Web Interface**
+```
+webui/
+├── app.py                # FastAPI application
+├── app_demo.py           # Demo/development server
+├── config_manager.py     # .env file management
+├── templates/            # Jinja2 HTML templates
+├── static/              # CSS, JavaScript, assets
+└── gunicorn.conf.py     # Production server config
 ```
 
 ## ⚙️ Configurazione
@@ -247,12 +326,22 @@ readers = ReaderFactory.create_dual_readers(
 # Test completo sistema
 python3 tests/test_refactored_system.py
 
-# Test specifici
-python3 -m pytest tests/unit/
-python3 -m pytest tests/integration/
+# Test specifici per moduli
+python3 -m pytest tests/unit/ -v
+python3 -m pytest tests/integration/ -v
+
+# Test copertura completa
+python3 -m pytest tests/ --cov=rfid_gate --cov-report=html
 ```
 
 **Risultati Test Attuali**: ✅ 7/7 Passati (100%)
+
+### Test Disponibili
+- ✅ **Unit Tests**: Moduli individuali
+- ✅ **Integration Tests**: Sistema completo  
+- ✅ **Hardware Mock Tests**: Simulazione hardware
+- ✅ **MQTT Integration**: Test connettività
+- ✅ **Configuration Validation**: Test configurazioni
 
 ## 📊 Monitoring
 
@@ -363,15 +452,34 @@ pip install RPi.GPIO mfrc522 adafruit-circuitpython-pn532 paho-mqtt
 - [ ] HA/Clustering support
 - [ ] Biometric readers support
 
-## 📞 Support
+## 📞 Support & Contributing
 
-Per problemi o domande:
+### 🐛 **Troubleshooting**
+1. Controlla `logs/system.log` per errori
+2. Esegui diagnostica: `python3 tests/test_refactored_system.py`
+3. Verifica configurazione: `python3 tools/rfid_diagnostic.py`
+4. Consulta [PN532 Quick Guide](docs/PN532_QUICK_GUIDE.md) per problemi hardware
 
-1. Controlla `logs/system.log`
-2. Esegui diagnostic: `python3 tests/test_refactored_system.py`
-3. Vedi troubleshooting in `archive/documentation/`
+### 🤝 **Contributing**
+1. Fork del repository
+2. Crea feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit delle modifiche (`git commit -m 'Add amazing feature'`)
+4. Push del branch (`git push origin feature/amazing-feature`)
+5. Apri una Pull Request
+
+### 📄 **License**
+Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per dettagli.
+
+### 👥 **Authors**
+- **Davide Donghi** - *Sviluppo iniziale e refactor* - [@diaghi13](https://github.com/diaghi13)
 
 ---
+
+### 🎯 **Project Status**
+- 🟢 **Production Ready**: Sistema testato e funzionante
+- 🟢 **Actively Maintained**: Aggiornamenti regolari
+- 🟢 **Full Documentation**: Guide complete disponibili
+- 🟢 **Modern Architecture**: Codice pulito e modulare
 
 _Sistema refactored completato il 6 ottobre 2025_  
 _Compatibilità totale mantenuta con architettura moderna_
