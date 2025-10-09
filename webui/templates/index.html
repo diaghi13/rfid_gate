@@ -161,7 +161,7 @@
         .hero-title {
           font-size: 2rem;
         }
-        
+
         .hero-subtitle {
           font-size: 1rem;
         }
@@ -174,11 +174,11 @@
         .nav-card {
           padding: 1rem;
         }
-        
+
         .nav-card-icon {
           font-size: 2.5rem;
         }
-        
+
         .hero-section {
           margin: 0 0.5rem 1.5rem 0.5rem;
           padding: 1.5rem 1rem;
@@ -235,94 +235,94 @@
           </p>
         </section>
 
-      <!-- Status Overview -->
-      <div class="status-overview">
-        <div class="status-item">
-          <div class="status-item-icon">
-            <i class="fas fa-circle status-online"></i>
+        <!-- Status Overview -->
+        <div class="status-overview">
+          <div class="status-item">
+            <div class="status-item-icon">
+              <i class="fas fa-circle status-online"></i>
+            </div>
+            <div class="status-item-label">Sistema</div>
+            <div class="status-item-value" id="system-status-home">Online</div>
           </div>
-          <div class="status-item-label">Sistema</div>
-          <div class="status-item-value" id="system-status-home">Online</div>
+          <div class="status-item">
+            <div class="status-item-icon">
+              <i class="fas fa-wifi status-online"></i>
+            </div>
+            <div class="status-item-label">Connessione</div>
+            <div class="status-item-value" id="connection-status-home">
+              Attiva
+            </div>
+          </div>
+          <div class="status-item">
+            <div class="status-item-icon">
+              <i class="fas fa-microchip status-online"></i>
+            </div>
+            <div class="status-item-label">Lettori</div>
+            <div class="status-item-value" id="readers-status-home">2/2</div>
+          </div>
+          <div class="status-item">
+            <div class="status-item-icon">
+              <i class="fas fa-thermometer-half status-online"></i>
+            </div>
+            <div class="status-item-label">Temperatura</div>
+            <div class="status-item-value" id="temperature-status-home">-</div>
+          </div>
         </div>
-        <div class="status-item">
-          <div class="status-item-icon">
-            <i class="fas fa-wifi status-online"></i>
-          </div>
-          <div class="status-item-label">Connessione</div>
-          <div class="status-item-value" id="connection-status-home">
-            Attiva
-          </div>
+
+        <!-- Navigation Grid -->
+        <div class="navigation-grid">
+          <!-- Dashboard -->
+          <a href="/dashboard" class="nav-card dashboard">
+            <div class="nav-card-icon">
+              <i class="fas fa-tachometer-alt"></i>
+            </div>
+            <h3 class="nav-card-title">Dashboard</h3>
+            <p class="nav-card-description">
+              Monitora lo stato del sistema in tempo reale. Visualizza
+              statistiche degli accessi, stato hardware e informazioni di rete.
+            </p>
+            <span class="nav-card-badge">Monitoraggio</span>
+          </a>
+
+          <!-- Configurazione -->
+          <a href="/config" class="nav-card config">
+            <div class="nav-card-icon">
+              <i class="fas fa-cog"></i>
+            </div>
+            <h3 class="nav-card-title">Configurazione</h3>
+            <p class="nav-card-description">
+              Gestisci le impostazioni del sistema, configura lettori RFID, relè
+              e parametri di rete. Backup e ripristino configurazioni.
+            </p>
+            <span class="nav-card-badge">Impostazioni</span>
+          </a>
+
+          <!-- Controllo Manuale -->
+          <a href="/control" class="nav-card control">
+            <div class="nav-card-icon">
+              <i class="fas fa-hand-pointer"></i>
+            </div>
+            <h3 class="nav-card-title">Controllo Manuale</h3>
+            <p class="nav-card-description">
+              Apertura manuale del cancello, test dei sistemi e controlli di
+              emergenza. Perfetto per manutenzione e test.
+            </p>
+            <span class="nav-card-badge">Azioni</span>
+          </a>
+
+          <!-- Log Accessi -->
+          <a href="/logs" class="nav-card logs">
+            <div class="nav-card-icon">
+              <i class="fas fa-list"></i>
+            </div>
+            <h3 class="nav-card-title">Log Accessi</h3>
+            <p class="nav-card-description">
+              Consulta lo storico degli accessi, ricerca per utente o carta,
+              esporta dati e analizza le statistiche di utilizzo.
+            </p>
+            <span class="nav-card-badge">Cronologia</span>
+          </a>
         </div>
-        <div class="status-item">
-          <div class="status-item-icon">
-            <i class="fas fa-microchip status-online"></i>
-          </div>
-          <div class="status-item-label">Lettori</div>
-          <div class="status-item-value" id="readers-status-home">2/2</div>
-        </div>
-        <div class="status-item">
-          <div class="status-item-icon">
-            <i class="fas fa-thermometer-half status-online"></i>
-          </div>
-          <div class="status-item-label">Temperatura</div>
-          <div class="status-item-value" id="temperature-status-home">-</div>
-        </div>
-      </div>
-
-      <!-- Navigation Grid -->
-      <div class="navigation-grid">
-        <!-- Dashboard -->
-        <a href="/dashboard" class="nav-card dashboard">
-          <div class="nav-card-icon">
-            <i class="fas fa-tachometer-alt"></i>
-          </div>
-          <h3 class="nav-card-title">Dashboard</h3>
-          <p class="nav-card-description">
-            Monitora lo stato del sistema in tempo reale. Visualizza statistiche
-            degli accessi, stato hardware e informazioni di rete.
-          </p>
-          <span class="nav-card-badge">Monitoraggio</span>
-        </a>
-
-        <!-- Configurazione -->
-        <a href="/config" class="nav-card config">
-          <div class="nav-card-icon">
-            <i class="fas fa-cog"></i>
-          </div>
-          <h3 class="nav-card-title">Configurazione</h3>
-          <p class="nav-card-description">
-            Gestisci le impostazioni del sistema, configura lettori RFID, relè e
-            parametri di rete. Backup e ripristino configurazioni.
-          </p>
-          <span class="nav-card-badge">Impostazioni</span>
-        </a>
-
-        <!-- Controllo Manuale -->
-        <a href="/control" class="nav-card control">
-          <div class="nav-card-icon">
-            <i class="fas fa-hand-pointer"></i>
-          </div>
-          <h3 class="nav-card-title">Controllo Manuale</h3>
-          <p class="nav-card-description">
-            Apertura manuale del cancello, test dei sistemi e controlli di
-            emergenza. Perfetto per manutenzione e test.
-          </p>
-          <span class="nav-card-badge">Azioni</span>
-        </a>
-
-        <!-- Log Accessi -->
-        <a href="/logs" class="nav-card logs">
-          <div class="nav-card-icon">
-            <i class="fas fa-list"></i>
-          </div>
-          <h3 class="nav-card-title">Log Accessi</h3>
-          <p class="nav-card-description">
-            Consulta lo storico degli accessi, ricerca per utente o carta,
-            esporta dati e analizza le statistiche di utilizzo.
-          </p>
-          <span class="nav-card-badge">Cronologia</span>
-        </a>
-      </div>
 
         <!-- Footer Info -->
         <footer class="footer-info">
@@ -331,7 +331,9 @@
             Sistema RFID Gate v2.0 - Gestione accessi intelligente
           </p>
           <p>
-            <small>Ultima sincronizzazione: <span id="last-sync">-</span></small>
+            <small
+              >Ultima sincronizzazione: <span id="last-sync">-</span></small
+            >
           </p>
         </footer>
       </main>
