@@ -326,8 +326,8 @@ class RFIDGateConfig:
             enabled=os.getenv('RELAY_IN_ENABLE', 'True').lower() == 'true',
             pin=int(os.getenv('RELAY_IN_PIN', 18)),
             active_time=int(os.getenv('RELAY_IN_ACTIVE_TIME', 2)),
-            active_low=os.getenv('RELAY_IN_ACTIVE_LOW', 'False').lower() == 'true',
-            initial_state=os.getenv('RELAY_IN_INITIAL_STATE', 'LOW').upper()
+            active_low=os.getenv('RELAY_IN_ACTIVE_LOW', 'True').lower() == 'true',  # ✅ Default Legacy: True
+            initial_state=os.getenv('RELAY_IN_INITIAL_STATE', 'HIGH').upper()       # ✅ Default Legacy: HIGH
         )
         
         # Relay OUT Config
@@ -335,8 +335,8 @@ class RFIDGateConfig:
             enabled=os.getenv('RELAY_OUT_ENABLE', 'False').lower() == 'true',
             pin=int(os.getenv('RELAY_OUT_PIN', 19)),
             active_time=int(os.getenv('RELAY_OUT_ACTIVE_TIME', 2)),
-            active_low=os.getenv('RELAY_OUT_ACTIVE_LOW', 'False').lower() == 'true',
-            initial_state=os.getenv('RELAY_OUT_INITIAL_STATE', 'LOW').upper()
+            active_low=os.getenv('RELAY_OUT_ACTIVE_LOW', 'True').lower() == 'true',  # ✅ Default Legacy: True
+            initial_state=os.getenv('RELAY_OUT_INITIAL_STATE', 'HIGH').upper()       # ✅ Default Legacy: HIGH
         )
         
         # Auth Config

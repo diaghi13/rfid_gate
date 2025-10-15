@@ -119,12 +119,13 @@ class GPIORelayController(BaseRelayController):
                 GPIO.setmode(GPIO.BCM)
                 GPIO.setup(self.pin, GPIO.OUT)
                 
-                # Stato iniziale
-                initial_state = GPIO.LOW
+                # Stato iniziale - LOGICA CORRETTA LEGACY
+                # initial_state = "HIGH" → GPIO HIGH (relè spento con active_low=True)
+                # initial_state = "LOW"  → GPIO LOW  (relè spento con active_low=False)
                 if self.initial_state == "HIGH":
-                    initial_state = GPIO.HIGH if not self.active_low else GPIO.LOW
+                    initial_state = GPIO.HIGH
                 else:
-                    initial_state = GPIO.LOW if not self.active_low else GPIO.HIGH
+                    initial_state = GPIO.LOW
                 
                 GPIO.output(self.pin, initial_state)
                 return True
@@ -151,7 +152,7 @@ class GPIORelayController(BaseRelayController):
         Imposta stato hardware GPIO.
         
         Args:
-            state: True per ON, False per OFF
+            state: True per ON (relè attivo), False per OFF (relè spento)
             
         Returns:
             bool: True se operazione riuscita
@@ -164,7 +165,14 @@ class GPIORelayController(BaseRelayController):
             
             def _set_gpio():
                 """Imposta GPIO sincrono"""
-                gpio_state = GPIO.HIGH if state else GPIO.LOW
+                # LOGICA CORRETTA per active_low
+                if self.active_low:
+                    # Con active_low=True: ON=LOW, OFF=HIGH
+                    gpio_state = GPIO.LOW if state else GPIO.HIGH
+                else:
+                    # Con active_low=False: ON=HIGH, OFF=LOW  
+                    gpio_state = GPIO.HIGH if state else GPIO.LOW
+                    
                 GPIO.output(self.pin, gpio_state)
                 return True
             
