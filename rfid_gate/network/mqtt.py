@@ -756,7 +756,7 @@ class AsyncMQTTClient:
     
     async def _send_message(self, message: MQTTMessage) -> bool:
         """
-        Invia messaggio (diretto o accodato).
+        Invia messaggio (diretto o accodato) in modo VERAMENTE asincrono.
         
         Args:
             message: Messaggio da inviare
@@ -765,13 +765,19 @@ class AsyncMQTTClient:
             bool: True se inviato/accodato con successo
         """
         if self.state == ConnectionState.CONNECTED and self.client:
-            # Invio diretto
+            # Invio diretto ASINCRONO per evitare blocchi
             try:
                 payload_str = json.dumps(message.payload)
-                result = self.client.publish(message.topic, payload_str, message.qos, message.retain)
+                
+                # ✨ USA THREAD POOL per evitare blocchi del publish sincrono
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,  # ThreadPoolExecutor default
+                    lambda: self.client.publish(message.topic, payload_str, message.qos, message.retain)
+                )
                 
                 if result.rc == 0:
-                    print(f"📤 MQTT inviato: {message.topic}")
+                    print(f"📤 MQTT inviato (async): {message.topic}")
                     return True
                 else:
                     print(f"❌ MQTT invio fallito: {result.rc}")
@@ -780,7 +786,7 @@ class AsyncMQTTClient:
                     return False
                     
             except Exception as e:
-                print(f"❌ Errore invio diretto: {e}")
+                print(f"❌ Errore invio asincrono: {e}")
                 # ✨ Aggiungi alla retry queue se abilitata
                 self._add_to_retry_queue(message)
                 return False
