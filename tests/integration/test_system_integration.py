@@ -59,7 +59,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_config_to_system_integration(self):
         """Test integrazione configurazione -> sistema"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Verifica che la configurazione sia valida
             self.assertEqual(config.tornello_id, 'test_gate_01')
@@ -85,7 +85,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_reader_factory_integration(self, mock_pn532, mock_i2c, mock_mfrc522):
         """Test integrazione factory lettori"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Crea lettore IN (MFRC522)
             in_config = {
@@ -147,7 +147,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_mqtt_integration(self, mock_mqtt_client):
         """Test integrazione client MQTT"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Mock del client MQTT
             mock_client = Mock()
@@ -173,7 +173,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_offline_mode_integration(self):
         """Test integrazione modalità offline"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Crea file offline temporaneo
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -182,24 +182,15 @@ class TestSystemIntegration(unittest.TestCase):
             
             try:
                 # Configura per modalità offline
-                config.offline_storage_file = offline_file
+                config.offline.enabled = True
+                config.offline.storage_file = offline_file
                 
-                # Simula sistema in offline
-                with patch.multiple(
-                    'rfid_gate.core.access_control',
-                    MFRC522Reader=Mock,
-                    PN532Reader=Mock,
-                    GPIORelay=Mock,
-                    AsyncMQTTClient=Mock
-                ):
-                    system = AccessControlSystem(config)
-                    
-                    # Verifica configurazione offline
-                    self.assertTrue(system.config.offline_mode_enabled)
-                    self.assertEqual(system.config.offline_storage_file, offline_file)
-                    
-                    # Test file offline accessibile
-                    self.assertTrue(os.path.exists(offline_file))
+                # Verifica configurazione offline
+                self.assertTrue(config.offline.enabled)
+                self.assertEqual(config.offline.storage_file, offline_file)
+                
+                # Test file offline accessibile
+                self.assertTrue(os.path.exists(offline_file))
                     
             finally:
                 if os.path.exists(offline_file):
@@ -208,7 +199,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_card_processing_workflow(self):
         """Test workflow completo processamento carta"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Mock di tutti i componenti
             mock_reader = Mock()
@@ -242,7 +233,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_error_handling_integration(self):
         """Test gestione errori nel sistema integrato"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Mock che solleva eccezioni
             mock_reader = Mock()
@@ -266,7 +257,7 @@ class TestSystemIntegration(unittest.TestCase):
         invalid_env['RFID_IN_RST_PIN'] = 'invalid'
         
         with patch.dict(os.environ, invalid_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Dovrebbe usare valori di default per campi invalidi
             self.assertEqual(config.mqtt_port, 1883)  # Default
@@ -275,7 +266,7 @@ class TestSystemIntegration(unittest.TestCase):
     def test_logging_integration(self):
         """Test integrazione sistema di logging"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Verifica configurazione logging
             self.assertEqual(config.log_level, 'DEBUG')

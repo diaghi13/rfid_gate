@@ -52,7 +52,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_mqtt_client_initialization(self, mock_mqtt_client):
         """Test inizializzazione client MQTT"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -75,7 +75,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_tls_configuration(self, mock_mqtt_client):
         """Test configurazione TLS"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -95,7 +95,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_message_formatting(self):
         """Test formattazione messaggi MQTT"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             with patch('rfid_gate.network.mqtt.mqtt_client.Client'):
                 mqtt = AsyncMQTTClient(config)
@@ -119,7 +119,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_connection_workflow(self, mock_mqtt_client):
         """Test workflow di connessione completo"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -146,7 +146,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_publish_workflow(self, mock_mqtt_client):
         """Test workflow pubblicazione messaggi"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -182,7 +182,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_subscription_workflow(self, mock_mqtt_client):
         """Test workflow sottoscrizioni"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -198,7 +198,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_message_callbacks(self):
         """Test gestione callback messaggi"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             with patch('rfid_gate.network.mqtt.mqtt_client.Client') as mock_mqtt_client:
                 mock_client = Mock()
@@ -231,7 +231,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_reconnection_logic(self, mock_mqtt_client):
         """Test logica di riconnessione"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -251,7 +251,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_offline_queue_integration(self, mock_mqtt_client):
         """Test integrazione coda offline"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client
@@ -274,7 +274,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_topic_generation(self):
         """Test generazione topic MQTT"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             with patch('rfid_gate.network.mqtt.mqtt_client.Client'):
                 mqtt = AsyncMQTTClient(config)
@@ -295,7 +295,7 @@ class TestMQTTIntegration(unittest.TestCase):
     def test_error_handling(self, mock_mqtt_client):
         """Test gestione errori MQTT"""
         with patch.dict(os.environ, self.test_env, clear=True):
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             mock_client = Mock()
             mock_mqtt_client.return_value = mock_client

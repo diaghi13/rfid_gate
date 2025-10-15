@@ -471,6 +471,7 @@ class AccessControlSystem:
                         direction=card_event.direction,
                         result="authorized",
                         reason=sync_result['reason'],
+                        customer_id=sync_result.get('customer_id'),  # ✨ NUOVO: ID cliente
                         customer_name=sync_result.get('customer_name'),
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
@@ -488,6 +489,7 @@ class AccessControlSystem:
                         direction=card_event.direction,
                         result="denied",
                         reason=sync_result['reason'],
+                        customer_id=sync_result.get('customer_id'),  # ✨ NUOVO: ID cliente
                         customer_name=sync_result.get('customer_name'),
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
@@ -506,6 +508,7 @@ class AccessControlSystem:
                         direction=card_event.direction,
                         result=result_str,
                         reason=f"MQTT auth: {decision.value}",
+                        customer_id=None,  # ✨ MQTT non ha customer_id
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
                     )
@@ -523,6 +526,7 @@ class AccessControlSystem:
                         direction=card_event.direction,
                         result=result_str,
                         reason=f"Offline legacy: {decision.value}",
+                        customer_id=None,  # ✨ Legacy offline non ha customer_id
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
                     )
@@ -537,6 +541,7 @@ class AccessControlSystem:
                         direction=card_event.direction,
                         result="authorized",
                         reason="Autenticazione disabilitata",
+                        customer_id=None,  # ✨ Auth disabilitata non ha customer_id
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
                     )

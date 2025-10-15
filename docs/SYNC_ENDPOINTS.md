@@ -83,6 +83,7 @@ Il sistema RFID Gate implementa un'architettura **offline-first** che richiede i
         {
             "timestamp": "2025-10-15T14:30:00.000Z",
             "card_uid": "E298C6EB",
+            "customer_id": "CUST123456",
             "tornello_id": "tornello_01",
             "direction": "in",
             "result": "authorized",
@@ -108,6 +109,8 @@ Il sistema RFID Gate implementa un'architettura **offline-first** che richiede i
   "message": "Log ricevuti correttamente"
 }
 ```
+
+> **📊 Nota sui Log Analytics**: Il campo `customer_id` è stato aggiunto per migliorare l'analisi dei dati di accesso. Viene automaticamente incluso quando disponibile, oppure viene impostato a `null` per le carte in whitelist o quando non disponibile.
 
 ### 3. 🔄 Aggiornamenti Incrementali
 
@@ -852,7 +855,7 @@ curl -X GET "https://your-api.com/api/sync" \
 curl -X POST "https://your-api.com/api/logs/bulk" \
      -H "Content-Type: application/json" \
      -H "X-API-Key: your-key" \
-     -d '{"logs":[{"timestamp":"2025-10-15T14:30:00.000Z","card_uid":"TEST123","tornello_id":"tornello_01","direction":"in","result":"authorized","reason":"Test"}]}'
+     -d '{"logs":[{"timestamp":"2025-10-15T14:30:00.000Z","card_uid":"TEST123","customer_id":"CUST789","tornello_id":"tornello_01","direction":"in","result":"authorized","reason":"Test"}]}'
 
 # Test health
 curl -X GET "https://your-api.com/api/health"

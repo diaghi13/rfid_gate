@@ -106,10 +106,10 @@ class SyncManager:
         self.logger = logging.getLogger(__name__)
         
         # Crea directory cache se non esiste
-        self.cache_dir = Path(config.cache_db_path).parent
+        self.cache_dir = Path(config.sync.cache_db_path).parent
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        self.db_path = config.cache_db_path
+        self.db_path = config.sync.cache_db_path
         self.is_online = False
         self.last_sync = None
         self.background_task: Optional[asyncio.Task] = None
@@ -147,6 +147,7 @@ class SyncManager:
                 direction TEXT,
                 result TEXT,
                 reason TEXT,
+                customer_id TEXT,  -- ✨ NUOVO: ID cliente per analytics
                 customer_name TEXT,
                 reader_type TEXT,
                 metadata TEXT,  -- JSON
@@ -200,6 +201,7 @@ class SyncManager:
             if not result:
                 return {
                     'authorized': False,
+                    'customer_id': None,         # ✨ NUOVO: ID cliente
                     'customer_name': None,
                     'reason': 'Carta non trovata nella cache locale',
                     'subscription_info': None,
@@ -212,6 +214,7 @@ class SyncManager:
             if in_white_list:
                 return {
                     'authorized': True,
+                    'customer_id': customer_id,  # ✨ NUOVO: ID cliente (può essere None per whitelist)
                     'customer_name': customer_name,
                     'reason': 'Carta in whitelist - accesso sempre autorizzato',
                     'subscription_info': {'type': 'whitelist', 'in_white_list': True},
@@ -253,6 +256,7 @@ class SyncManager:
             if valid_subscription:
                 return {
                     'authorized': True,
+                    'customer_id': customer_id,  # ✨ NUOVO: ID cliente
                     'customer_name': customer_name,
                     'reason': 'Accesso autorizzato (modalità offline)',
                     'subscription_info': valid_subscription,
@@ -261,6 +265,7 @@ class SyncManager:
             else:
                 return {
                     'authorized': False,
+                    'customer_id': customer_id,  # ✨ NUOVO: ID cliente
                     'customer_name': customer_name,
                     'reason': 'Nessun abbonamento valido',
                     'subscription_info': None,
@@ -271,6 +276,7 @@ class SyncManager:
             self.logger.error(f"Errore validazione offline: {e}")
             return {
                 'authorized': False,
+                'customer_id': None,         # ✨ NUOVO: ID cliente
                 'customer_name': None,
                 'reason': f'Errore validazione: {e}',
                 'subscription_info': None,
@@ -317,6 +323,7 @@ class SyncManager:
             conn.close()
     
     async def log_access(self, card_uid: str, direction: str, result: str, reason: str, 
+                        customer_id: Optional[int] = None,  # ✨ NUOVO: ID cliente
                         customer_name: Optional[str] = None, reader_type: Optional[str] = None,
                         metadata: Dict[str, Any] = None):
         """
@@ -327,6 +334,7 @@ class SyncManager:
             direction: "in" o "out" 
             result: "authorized", "denied", "manual"
             reason: Motivo del risultato
+            customer_id: ID cliente univoco (✨ NUOVO per analytics)
             customer_name: Nome cliente (se disponibile)
             reader_type: Tipo lettore (mfrc522, pn532)
             metadata: Dati aggiuntivi
@@ -340,8 +348,8 @@ class SyncManager:
             cursor.execute('''
                 INSERT INTO pending_logs 
                 (timestamp, card_uid, tornello_id, direction, result, reason, 
-                 customer_name, reader_type, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 customer_id, customer_name, reader_type, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 timestamp,
                 card_uid,
@@ -349,13 +357,17 @@ class SyncManager:
                 direction,
                 result,
                 reason,
+                customer_id,  # ✨ NUOVO campo
                 customer_name,
                 reader_type,
                 json.dumps(metadata or {})
             ))
             
             conn.commit()
-            self.logger.info(f"Log registrato: {card_uid} - {result}")
+            
+            # Log migliorato con customer info
+            customer_info = f" (customer_id: {customer_id})" if customer_id else ""
+            self.logger.info(f"📝 Log registrato: {card_uid} - {result}{customer_info}")
             
             # Prova sync immediato se online
             if self.is_online:
@@ -442,7 +454,7 @@ class SyncManager:
             # Recupera log da sincronizzare
             cursor.execute('''
                 SELECT id, timestamp, card_uid, tornello_id, direction, result, reason,
-                       customer_name, reader_type, metadata
+                       customer_id, customer_name, reader_type, metadata
                 FROM pending_logs 
                 WHERE synced = 0
                 ORDER BY timestamp
@@ -464,9 +476,10 @@ class SyncManager:
                     'direction': log[4],
                     'result': log[5],
                     'reason': log[6],
-                    'customer_name': log[7],
-                    'reader_type': log[8],
-                    'metadata': json.loads(log[9] or '{}')
+                    'customer_id': log[7],        # ✨ NUOVO: ID cliente per analytics
+                    'customer_name': log[8],
+                    'reader_type': log[9],
+                    'metadata': json.loads(log[10] or '{}')
                 })
             
             # Invia al server

@@ -298,7 +298,7 @@ TORNELLO_ID=test_01
                     'TORNELLO_ID': 'test_01'
                 })
                 
-                config = RFIDGateConfig.load_from_env()
+                config = RFIDGateConfig.from_env()
                 
                 self.assertEqual(config.mqtt_broker, 'test.broker.com')
                 self.assertEqual(config.tornello_id, 'test_01')
@@ -335,7 +335,7 @@ TORNELLO_ID=test_01
             }
             
             os.environ.update(env_vars)
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             
             # Test MQTT
             self.assertEqual(config.mqtt_broker, 'prod.broker.com')
@@ -392,7 +392,7 @@ TORNELLO_ID=test_01
                     'BIDIRECTIONAL_MODE': input_val
                 })
                 
-                config = RFIDGateConfig.load_from_env()
+                config = RFIDGateConfig.from_env()
                 self.assertEqual(config.bidirectional_mode, expected, 
                                f"Input '{input_val}' should be {expected}")
     
@@ -407,7 +407,7 @@ TORNELLO_ID=test_01
                 'RELAY_IN_ACTIVE_TIME': '5'
             })
             
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             self.assertEqual(config.mqtt_port, 9999)
             self.assertEqual(config.rfid_in_rst_pin, 25)
             self.assertEqual(config.relay_in_active_time, 5)
@@ -422,7 +422,7 @@ TORNELLO_ID=test_01
                 'CARD_READ_INTERVAL': '0.1'
             })
             
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             self.assertEqual(config.rfid_debounce_time, 2.5)
             self.assertEqual(config.card_read_interval, 0.1)
     
@@ -436,7 +436,7 @@ TORNELLO_ID=test_01
                 'RFID_DEBOUNCE_TIME': 'not_a_number'  # Default 2.0
             })
             
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             self.assertEqual(config.mqtt_port, 1883)  # Default
             self.assertEqual(config.rfid_debounce_time, 2.0)  # Default
     
@@ -450,7 +450,7 @@ TORNELLO_ID=test_01
             
             # Dovrebbe usare default o sollevare eccezione a seconda dell'implementazione
             try:
-                config = RFIDGateConfig.load_from_env()
+                config = RFIDGateConfig.from_env()
                 # Se non solleva eccezione, verifica che abbia un valore di default
                 self.assertIsNotNone(config.tornello_id)
             except Exception:
@@ -467,7 +467,7 @@ TORNELLO_ID=test_01
                 'MQTT_AUTH_RESPONSE_TOPIC': 'custom/auth_response'
             })
             
-            config = RFIDGateConfig.load_from_env()
+            config = RFIDGateConfig.from_env()
             self.assertEqual(config.mqtt_card_read_topic, 'custom/card_read')
             self.assertEqual(config.mqtt_auth_response_topic, 'custom/auth_response')
 

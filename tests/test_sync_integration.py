@@ -48,7 +48,7 @@ class TestSyncSystem:
         # Crea SyncManager
         self.sync_manager = SyncManager(sync_config, "test_tornello")
         
-        print(f"✅ Setup completato - DB: {sync_config.cache_db_path}")
+        print(f"✅ Setup completato - DB: {sync_config.sync.cache_db_path}")
     
     async def test_local_cache(self):
         """Test cache locale senza server"""
@@ -132,6 +132,7 @@ class TestSyncSystem:
             direction="in",
             result="authorized",
             reason="Test accesso",
+            customer_id=12345,  # ✨ NUOVO: Testa con customer_id
             customer_name="Test User",
             reader_type="test",
             metadata={"test": True}
@@ -143,6 +144,7 @@ class TestSyncSystem:
             direction="out",
             result="denied",
             reason="Carta non valida",
+            customer_id=None,  # ✨ Testa senza customer_id
             reader_type="test"
         )
         
@@ -224,7 +226,8 @@ class TestSyncSystem:
             card_uid="TEST123",
             direction="in", 
             result="authorized",
-            reason="Test offline"
+            reason="Test offline",
+            customer_id=67890  # ✨ Testa customer_id diverso
         )
         
         # Verifica accumulo log
