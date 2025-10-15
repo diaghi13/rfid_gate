@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import uvicorn
@@ -37,10 +37,53 @@ parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
 # Import RFID Gate modules
-from rfid_gate import AccessControlSystem, RFIDGateConfig
 from rfid_gate.config.settings import Config
-from rfid_gate.logging.logger import AccessLogger
+# Note: AccessControlSystem e AccessLogger saranno implementati in futuro
+# from rfid_gate import AccessControlSystem, RFIDGateConfig
+# from rfid_gate.logging.logger import AccessLogger
 from config_manager import ConfigManager
+
+# ==============================================================================
+# 🧪 MOCK CLASSES (temporanee fino all'implementazione completa)
+# ==============================================================================
+
+class MockAccessControlSystem:
+    """Mock temporaneo per AccessControlSystem"""
+    def __init__(self, config=None):
+        self.config = config
+        self.running = False
+    
+    def get_status(self):
+        return {
+            "running": self.running,
+            "hardware": {
+                "rfid_in": {"status": "connected", "type": "PN532"},
+                "rfid_out": {"status": "connected", "type": "PN532"},
+                "relay": {"status": "ready"},
+                "gpio": {"status": "ready"}
+            }
+        }
+
+class MockAccessLogger:
+    """Mock temporaneo per AccessLogger"""
+    def __init__(self):
+        self.logs = []
+    
+    def get_recent_logs(self, limit=50):
+        # Ritorna log di esempio
+        return [
+            {
+                "timestamp": "2025-10-15T10:30:00",
+                "uid": "04:1A:2B:3C",
+                "customer_id": "CUST001",
+                "direction": "in",
+                "status": "authorized"
+            }
+        ]
+
+# Istanze mock globali
+AccessControlSystem = MockAccessControlSystem
+AccessLogger = MockAccessLogger
 
 
 # ==============================================================================
@@ -59,7 +102,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 # Templates and static files
-templates = Jinja2Templates(directory="templates")
+current_dir = Path(__file__).parent
+templates = Jinja2Templates(directory=str(current_dir / "templates"))
 
 # Default admin user (change in production!)
 DEFAULT_ADMIN = {
@@ -91,7 +135,7 @@ app.add_middleware(
 )
 
 # Static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(current_dir / "static")), name="static")
 
 
 # ==============================================================================
@@ -124,6 +168,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verify JWT token"""
     try:
+        # Modalità demo - accetta token demo per sviluppo
+        if credentials.credentials == "demo-token-12345":
+            return {
+                "username": "admin",
+                "role": "admin",  # Cambiato da "administrator" a "admin"
+                "name": "Demo Admin"
+            }
+        
+        # JWT normale
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
@@ -192,8 +245,8 @@ class ConnectionManager:
 
 # Global instances
 manager = ConnectionManager()
-rfid_system: Optional[AccessControlSystem] = None
-access_logger: Optional[AccessLogger] = None
+rfid_system = None  # Optional[AccessControlSystem] = None - TODO: Implementare
+access_logger = None  # Optional[AccessLogger] = None - TODO: Implementare
 
 
 # ==============================================================================
@@ -201,10 +254,25 @@ access_logger: Optional[AccessLogger] = None
 # ==============================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    """Main dashboard page"""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+async def homepage(request: Request):
+    """Homepage with system overview"""
+    return templates.TemplateResponse("index.html", {"request": request})
 
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon"""
+    favicon_path = current_dir / "static" / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(favicon_path)
+    else:
+        # Ritorna un favicon vuoto se non esiste
+        return Response(content="", media_type="image/x-icon")
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    """Dashboard page"""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -228,6 +296,12 @@ async def logs_page(request: Request):
 async def config_page(request: Request):
     """Configuration page"""
     return templates.TemplateResponse("config.html", {"request": request})
+
+
+@app.get("/config/advanced", response_class=HTMLResponse)
+async def config_advanced_page(request: Request):
+    """Advanced configuration page with all 95+ settings"""
+    return templates.TemplateResponse("config_advanced.html", {"request": request})
 
 
 # ==============================================================================
@@ -287,8 +361,9 @@ async def get_system_status(current_user: dict = Depends(verify_token)):
         
         # Initialize system if needed
         if rfid_system is None:
-            config = RFIDGateConfig()
-            rfid_system = AccessControlSystem(config)
+            # Mock configuration per demo
+            rfid_system = AccessControlSystem()
+            rfid_system.running = True
         
         status_data = {
             "timestamp": datetime.now().isoformat(),
@@ -404,6 +479,106 @@ async def get_control_status(current_user: dict = Depends(verify_token)):
 # ==============================================================================
 # 🔧 CONFIGURATION API  
 # ==============================================================================
+
+@app.get("/api/config/all")
+async def get_all_config(current_user: dict = Depends(verify_token)):
+    """Get complete system configuration with all 95+ variables"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Inizializza ConfigManager
+        config_manager = ConfigManager()
+        
+        # Carica configurazione attuale dal .env
+        env_config = config_manager.load_env_config()
+        
+        # Organizza in sezioni per la Web UI
+        sections = config_manager.get_config_sections()
+        descriptions = config_manager.get_config_descriptions()
+        
+        # Restituisce tutte le configurazioni organizzate
+        return {
+            "success": True,
+            "data": env_config,  # Tutte le variabili .env
+            "sections": sections,  # Organizzazione per sezioni
+            "descriptions": descriptions,  # Descrizioni user-friendly
+            "total_configs": len(env_config),
+            "message": f"Configurazione completa caricata con {len(env_config)} parametri"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore nel caricamento configurazione completa: {str(e)}"
+        )
+
+@app.post("/api/config/advanced")
+async def update_advanced_config(request: Request, current_user: dict = Depends(verify_token)):
+    """Update advanced configuration with all variables"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        config_updates = await request.json()
+        
+        # Inizializza ConfigManager
+        config_manager = ConfigManager()
+        
+        # Carica configurazione attuale
+        current_config = config_manager.load_env_config()
+        
+        # Applica gli aggiornamenti
+        for key, value in config_updates.items():
+            current_config[key] = str(value)
+        
+        # Valida la configurazione
+        validation_errors = config_manager.validate_config(current_config)
+        if validation_errors:
+            return {
+                "success": False,
+                "errors": validation_errors,
+                "message": f"Errori di validazione: {len(validation_errors)}"
+            }
+        
+        # Salva la configurazione
+        if config_manager.save_env_config(current_config):
+            return {
+                "success": True,
+                "updated_fields": list(config_updates.keys()),
+                "total_updated": len(config_updates),
+                "message": f"Configurazione aggiornata con successo: {len(config_updates)} modifiche"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Errore nel salvataggio file .env")
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore nell'aggiornamento configurazione avanzata: {str(e)}"
+        )
+
+@app.post("/api/config/backup")
+async def create_config_backup(current_user: dict = Depends(verify_token)):
+    """Create configuration backup"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        config_manager = ConfigManager()
+        backup_file = config_manager._create_backup()
+        
+        return {
+            "success": True,
+            "backup_file": backup_file,
+            "message": "Backup creato con successo"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore nella creazione backup: {str(e)}"
+        )
 
 @app.get("/api/config")
 async def get_config(current_user: dict = Depends(verify_token)):

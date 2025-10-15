@@ -157,6 +157,9 @@ class SystemConfig:
     card_read_interval: float = 0.15
     global_debounce_time: float = 0.8
     
+    # Bidirectional Control
+    bidirectional_timeout_hours: float = 24.0  # Reset stato dopo 24 ore
+    
     # UID Formatting
     uid_format_mode: UIDFormatMode = UIDFormatMode.REMOVE_SUFFIX
     uid_chars_count: int = 2
@@ -263,6 +266,7 @@ class RFIDGateConfig:
             rfid_debounce_time=float(os.getenv('RFID_DEBOUNCE_TIME', '2.0')),
             card_read_interval=float(os.getenv('CARD_READ_INTERVAL', '0.15')),
             global_debounce_time=float(os.getenv('GLOBAL_DEBOUNCE_TIME', '0.8')),
+            bidirectional_timeout_hours=float(os.getenv('BIDIRECTIONAL_TIMEOUT_HOURS', '24.0')),
             uid_format_mode=UIDFormatMode(os.getenv('UID_FORMAT_MODE', 'remove_suffix')),
             uid_chars_count=int(os.getenv('UID_CHARS_COUNT', 2)),
             uid_target_length=int(os.getenv('UID_TARGET_LENGTH', 8)),

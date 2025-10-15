@@ -161,6 +161,10 @@ class ConfigManager:
             "relay": {},
             "logging": {},
             "offline": {},
+            "sync": {},
+            "timing": {},
+            "uid": {},
+            "debug": {},
             "other": {}
         }
         
@@ -172,11 +176,10 @@ class ConfigManager:
             "RFID_": "readers", 
             "PN532_": "readers",
             "MFRC522_": "readers",
-            # System
+            # System  
             "TORNELLO_": "system",
             "BIDIRECTIONAL_": "system",
             "ENABLE_": "system",
-            "DEBOUNCE_": "system",
             # Security
             "AUTH_": "security",
             "MANUAL_OPEN_": "security",
@@ -184,15 +187,28 @@ class ConfigManager:
             "RELAY_": "relay",
             # Logging
             "LOG_": "logging",
+            "ACCESS_LOG": "logging",
             # Offline
             "OFFLINE_": "offline",
             "CONNECTION_": "offline",
+            # Sync
+            "SYNC_": "sync",
+            # Timing
+            "CARD_READ_INTERVAL": "timing",
+            "RFID_DEBOUNCE_TIME": "timing", 
+            "GLOBAL_DEBOUNCE_TIME": "timing",
+            "MQTT_TIMEOUT": "timing",
+            # UID
+            "UID_": "uid",
+            # Debug
+            "DEBUG_": "debug",
+            "SIMULATION_": "debug",
         }
         
         for key, value in config.items():
             section = "other"
             for prefix, target_section in section_mapping.items():
-                if key.startswith(prefix):
+                if key.startswith(prefix) or key == prefix:
                     section = target_section
                     break
             
@@ -224,56 +240,109 @@ class ConfigManager:
             if key not in config or not config[key]:
                 errors.append(f"Campo obbligatorio mancante: {key}")
         
-        # Validazione valori
-        if "MQTT_PORT" in config:
-            try:
-                port = int(config["MQTT_PORT"])
-                if not (1 <= port <= 65535):
-                    errors.append("MQTT_PORT deve essere tra 1 e 65535")
-            except ValueError:
-                errors.append("MQTT_PORT deve essere un numero")
+        # Validazione valori numerici
+        numeric_validations = {
+            "MQTT_PORT": (1, 65535, "MQTT_PORT deve essere tra 1 e 65535"),
+            "RELAY_IN_PIN": (1, 40, "RELAY_IN_PIN deve essere tra 1 e 40"),
+            "RELAY_OUT_PIN": (1, 40, "RELAY_OUT_PIN deve essere tra 1 e 40"),
+            "BIDIRECTIONAL_TIMEOUT_HOURS": (0.1, 168.0, "BIDIRECTIONAL_TIMEOUT_HOURS deve essere tra 0.1 e 168 ore"),
+            "SYNC_UPDATES_INTERVAL": (1, 1440, "SYNC_UPDATES_INTERVAL deve essere tra 1 e 1440 minuti"),
+            "SYNC_LOGS_INTERVAL": (1, 60, "SYNC_LOGS_INTERVAL deve essere tra 1 e 60 minuti"),
+            "CARD_READ_INTERVAL": (0.01, 5.0, "CARD_READ_INTERVAL deve essere tra 0.01 e 5.0 secondi"),
+            "RFID_DEBOUNCE_TIME": (0.1, 10.0, "RFID_DEBOUNCE_TIME deve essere tra 0.1 e 10.0 secondi"),
+        }
         
-        if "RELAY_IN_PIN" in config:
-            try:
-                pin = int(config["RELAY_IN_PIN"])
-                if not (1 <= pin <= 40):
-                    errors.append("RELAY_IN_PIN deve essere tra 1 e 40")
-            except ValueError:
-                errors.append("RELAY_IN_PIN deve essere un numero")
-        
-        if "RELAY_OUT_PIN" in config:
-            try:
-                pin = int(config["RELAY_OUT_PIN"])
-                if not (1 <= pin <= 40):
-                    errors.append("RELAY_OUT_PIN deve essere tra 1 e 40")
-            except ValueError:
-                errors.append("RELAY_OUT_PIN deve essere un numero")
-        
-        # Validazione timing relè
-        for relay_type in ["IN", "OUT"]:
-            time_key = f"RELAY_{relay_type}_ACTIVE_TIME"
-            if time_key in config:
+        for key, (min_val, max_val, error_msg) in numeric_validations.items():
+            if key in config and config[key]:
                 try:
-                    time_val = float(config[time_key])
-                    if not (0.1 <= time_val <= 30):
-                        errors.append(f"{time_key} deve essere tra 0.1 e 30 secondi")
+                    value = float(config[key])
+                    if not (min_val <= value <= max_val):
+                        errors.append(error_msg)
                 except ValueError:
-                    errors.append(f"{time_key} deve essere un numero")
-
-        # Validazione formato booleano
-        bool_keys = [
-            "MQTT_USE_TLS", "BIDIRECTIONAL_MODE", "RFID_IN_ENABLE", 
-            "RFID_OUT_ENABLE", "AUTH_ENABLED", "OFFLINE_MODE_ENABLED",
-            "RELAY_IN_ENABLE", "RELAY_OUT_ENABLE", "RELAY_IN_ACTIVE_LOW", "RELAY_OUT_ACTIVE_LOW"
-        ]
+                    errors.append(f"{key} deve essere un numero")
         
-        for key in bool_keys:
-            if key in config and config[key].lower() not in ['true', 'false']:
-                errors.append(f"{key} deve essere 'True' o 'False'")
+        # Validazioni specifiche
+        if "UID_FORMAT_MODE" in config:
+            valid_modes = ["remove_suffix", "fixed_length", "raw"]
+            if config["UID_FORMAT_MODE"] not in valid_modes:
+                errors.append(f"UID_FORMAT_MODE deve essere uno di: {', '.join(valid_modes)}")
+        
+        if "RFID_IN_READER_TYPE" in config:
+            valid_types = ["mfrc522", "pn532"]
+            if config["RFID_IN_READER_TYPE"] not in valid_types:
+                errors.append(f"RFID_IN_READER_TYPE deve essere uno di: {', '.join(valid_types)}")
+        
+        if "RFID_IN_PN532_INTERFACE" in config:
+            valid_interfaces = ["i2c", "spi", "uart"]
+            if config["RFID_IN_PN532_INTERFACE"] not in valid_interfaces:
+                errors.append(f"RFID_IN_PN532_INTERFACE deve essere uno di: {', '.join(valid_interfaces)}")
+        
+        # Validazioni URL
+        if "SYNC_SERVER_URL" in config and config["SYNC_SERVER_URL"]:
+            url = config["SYNC_SERVER_URL"]
+            if not (url.startswith("http://") or url.startswith("https://")):
+                errors.append("SYNC_SERVER_URL deve iniziare con http:// o https://")
         
         return errors
     
-    def get_backup_list(self) -> List[Dict[str, str]]:
+    def get_config_descriptions(self) -> Dict[str, Dict[str, str]]:
+        """Restituisce descrizioni per tutte le configurazioni"""
+        return {
+            "mqtt": {
+                "MQTT_BROKER": "Indirizzo del broker MQTT",
+                "MQTT_PORT": "Porta del broker MQTT (1883 o 8883)",
+                "MQTT_USERNAME": "Username per autenticazione MQTT",
+                "MQTT_PASSWORD": "Password per autenticazione MQTT",
+                "MQTT_USE_TLS": "Abilita connessione sicura TLS",
+                "MQTT_KEEP_ALIVE": "Intervallo keep-alive in secondi",
+                "MQTT_CARD_READ_TOPIC": "Topic per invio letture carte",
+                "MQTT_AUTH_RESPONSE_TOPIC": "Topic per risposte autenticazione",
+                "MQTT_MANUAL_OPEN_TOPIC": "Topic per aperture manuali"
+            },
+            "system": {
+                "TORNELLO_ID": "Identificativo unico del tornello",
+                "BIDIRECTIONAL_MODE": "Abilita controllo bidirezionale",
+                "BIDIRECTIONAL_TIMEOUT_HOURS": "Timeout reset stato direzione (ore)",
+                "ENABLE_IN_READER": "Abilita lettore ingresso",
+                "ENABLE_OUT_READER": "Abilita lettore uscita"
+            },
+            "readers": {
+                "RFID_IN_READER_TYPE": "Tipo lettore ingresso (mfrc522/pn532)",
+                "RFID_IN_PN532_INTERFACE": "Interfaccia PN532 (i2c/spi/uart)",
+                "RFID_IN_PN532_I2C_ADDRESS": "Indirizzo I2C del PN532",
+                "RFID_OUT_READER_TYPE": "Tipo lettore uscita (mfrc522/pn532)",
+                "RFID_OUT_PN532_INTERFACE": "Interfaccia PN532 uscita",
+                "PN532_READ_TIMEOUT": "Timeout lettura PN532 (secondi)",
+                "PN532_MAX_ERRORS": "Massimo errori consecutivi PN532",
+                "PN532_RESET_DELAY": "Delay reset PN532 (secondi)"
+            },
+            "sync": {
+                "SYNC_ENABLED": "Abilita sistema sincronizzazione",
+                "SYNC_SERVER_URL": "URL server per sincronizzazione",
+                "SYNC_DAILY_TIME": "Ora sync giornaliera (HH:MM)",
+                "SYNC_UPDATES_INTERVAL": "Intervallo check aggiornamenti (minuti)",
+                "SYNC_LOGS_INTERVAL": "Intervallo sync log (minuti)",
+                "SYNC_CONNECTION_TIMEOUT": "Timeout connessione sync (secondi)"
+            },
+            "timing": {
+                "RELAY_CLOSE_DELAY": "Delay chiusura relay (secondi)",
+                "RELAY_OPEN_DURATION": "Durata apertura relay (secondi)",
+                "READ_INTERVAL": "Intervallo tra letture RFID (secondi)"
+            },
+            "uid": {
+                "UID_FORMAT_MODE": "Formato UID (hex/dec/bytes)",
+                "UID_PREFIX": "Prefisso per UID formattati",
+                "UID_SUFFIX": "Suffisso per UID formattati"
+            },
+            "debug": {
+                "DEBUG_MODE": "Abilita modalità debug",
+                "LOG_LEVEL": "Livello di logging",
+                "LOG_TO_FILE": "Salva log su file",
+                "LOG_RETENTION_DAYS": "Giorni di conservazione log"
+            }
+        }
+
+    def _create_backup(self):
         """Ottiene lista dei backup disponibili"""
         backups = []
         

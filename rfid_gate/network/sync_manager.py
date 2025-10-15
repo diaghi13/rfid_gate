@@ -100,16 +100,23 @@ class SyncManager:
     - Queue log per invio al server
     """
     
-    def __init__(self, config: SyncConfig, tornello_id: str):
-        self.config = config
+    def __init__(self, config, tornello_id: str):
+        # Supporta sia SyncConfig che RFIDGateConfig per compatibilità test
+        if hasattr(config, 'sync'):  # È RFIDGateConfig
+            self.config = config.sync
+            self.system_config = config.system
+        else:  # È SyncConfig
+            self.config = config
+            self.system_config = None  # Fallback per test legacy
+            
         self.tornello_id = tornello_id
         self.logger = logging.getLogger(__name__)
         
         # Crea directory cache se non esiste
-        self.cache_dir = Path(config.sync.cache_db_path).parent
+        self.cache_dir = Path(self.config.cache_db_path).parent
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        self.db_path = config.sync.cache_db_path
+        self.db_path = self.config.cache_db_path
         self.is_online = False
         self.last_sync = None
         self.background_task: Optional[asyncio.Task] = None
@@ -167,11 +174,194 @@ class SyncManager:
             )
         ''')
         
+        # Tabella stato direzioni utenti (per tornelli bidirezionali)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_direction_state (
+                card_uid TEXT PRIMARY KEY,
+                last_direction TEXT NOT NULL,
+                last_access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                tornello_id TEXT,
+                customer_id TEXT
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         
         self.logger.info(f"📁 Database cache inizializzato: {self.db_path}")
     
+    async def check_bidirectional_access(self, card_uid: str, direction: str, tornello_id: str) -> Dict[str, Any]:
+        """
+        Controlla se l'accesso è valido per tornelli bidirezionali con timeout.
+        
+        Args:
+            card_uid: UID della carta
+            direction: Direzione richiesta ('in' o 'out')
+            tornello_id: ID del tornello
+            
+        Returns:
+            Dict con:
+            - valid: bool - Se l'accesso è valido
+            - reason: str - Motivo del rifiuto se non valido
+            - last_direction: str - Ultima direzione registrata
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Cerca ultima direzione per questa carta su questo tornello
+            cursor.execute('''
+                SELECT last_direction, last_access_time, tornello_id 
+                FROM user_direction_state 
+                WHERE card_uid = ? AND tornello_id = ?
+            ''', (card_uid, tornello_id))
+            
+            result = cursor.fetchone()
+            
+            if not result:
+                # Prima volta che vediamo questa carta - permetti qualsiasi direzione
+                return {
+                    'valid': True,
+                    'reason': 'Prima lettura carta',
+                    'last_direction': None
+                }
+            
+            last_direction, last_access_time, last_tornello = result
+            
+            # 🕐 CONTROLLO TIMEOUT - Se passato troppo tempo, resetta stato
+            from datetime import datetime, timedelta
+            
+            # Parsing del timestamp (formato SQLite)
+            try:
+                if '.' in last_access_time:
+                    # Formato con microsecondi: "2025-01-15 10:30:00.123456"
+                    last_time = datetime.strptime(last_access_time, '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    # Formato senza microsecondi: "2025-01-15 10:30:00"
+                    last_time = datetime.strptime(last_access_time, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                # Se c'è un errore nel parsing, considera scaduto
+                self.logger.warning(f"⚠️  Formato timestamp non valido per {card_uid}: {last_access_time}")
+                return {
+                    'valid': True,
+                    'reason': 'Timestamp non valido - stato resettato',
+                    'last_direction': None
+                }
+            
+            # Calcola se il timeout è scaduto
+            if self.system_config:
+                timeout_hours = self.system_config.bidirectional_timeout_hours
+            else:
+                timeout_hours = 24.0  # Default fallback
+                
+            timeout_delta = timedelta(hours=timeout_hours)
+            current_time = datetime.now()
+            
+            if current_time - last_time > timeout_delta:
+                # Timeout scaduto - permetti qualsiasi direzione e logga
+                self.logger.info(f"🕐 Timeout scaduto per {card_uid} ({timeout_hours}h). Stato resettato.")
+                return {
+                    'valid': True,
+                    'reason': f'Timeout scaduto ({timeout_hours}h) - stato resettato',
+                    'last_direction': last_direction  # Per info, ma stato considerato resettato
+                }
+            
+            # Se è lo stesso tornello e stessa direzione -> NON VALIDO
+            if last_tornello == tornello_id and last_direction == direction:
+                time_since_last = current_time - last_time
+                return {
+                    'valid': False,
+                    'reason': f'Accesso consecutivo stesso tipo: {direction}. Ultima direzione: {last_direction} ({time_since_last})',
+                    'last_direction': last_direction
+                }
+            
+            # Accesso valido (direzione opposta o tornello diverso)
+            time_since_last = current_time - last_time
+            return {
+                'valid': True,
+                'reason': f'Accesso valido. Precedente: {last_direction} -> Richiesto: {direction} ({time_since_last})',
+                'last_direction': last_direction
+            }
+            
+        finally:
+            conn.close()
+    
+    async def update_user_direction(self, card_uid: str, direction: str, tornello_id: str, customer_id: str = None):
+        """
+        Aggiorna lo stato della direzione per un utente.
+        
+        Args:
+            card_uid: UID della carta
+            direction: Direzione ('in' o 'out')
+            tornello_id: ID del tornello
+            customer_id: ID del cliente (opzionale)
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT OR REPLACE INTO user_direction_state 
+                (card_uid, last_direction, last_access_time, tornello_id, customer_id)
+                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)
+            ''', (card_uid, direction, tornello_id, customer_id))
+            
+            conn.commit()
+            self.logger.debug(f"🔄 Aggiornato stato direzione: {card_uid} -> {direction}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Errore update_user_direction: {e}")
+            raise
+        finally:
+            conn.close()
+    
+    async def cleanup_expired_direction_states(self) -> int:
+        """
+        Rimuove stati direzioni scaduti dal database per mantenerlo pulito.
+        
+        Returns:
+            int: Numero di record rimossi
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Calcola timestamp di cutoff
+            from datetime import datetime, timedelta
+            if self.system_config:
+                timeout_hours = self.system_config.bidirectional_timeout_hours
+            else:
+                timeout_hours = 24.0  # Default fallback
+                
+            cutoff_time = datetime.now() - timedelta(hours=timeout_hours)
+            cutoff_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Conta record da rimuovere per logging
+            cursor.execute('''
+                SELECT COUNT(*) FROM user_direction_state 
+                WHERE last_access_time < ?
+            ''', (cutoff_str,))
+            
+            count_to_remove = cursor.fetchone()[0]
+            
+            if count_to_remove > 0:
+                # Rimuovi record scaduti
+                cursor.execute('''
+                    DELETE FROM user_direction_state 
+                    WHERE last_access_time < ?
+                ''', (cutoff_str,))
+                
+                conn.commit()
+                self.logger.info(f"🧹 Cleanup: rimossi {count_to_remove} stati direzioni scaduti (>{timeout_hours}h)")
+            
+            return count_to_remove
+            
+        except Exception as e:
+            self.logger.error(f"❌ Errore cleanup stati direzioni: {e}")
+            return 0
+        finally:
+            conn.close()
+
     async def validate_card_offline(self, card_uid: str, direction: str = "in") -> Dict[str, Any]:
         """
         Valida carta usando cache locale.
@@ -648,6 +838,7 @@ class SyncManager:
         """Worker per sincronizzazioni periodiche"""
         last_updates_check = datetime.min
         last_logs_sync = datetime.min
+        last_cleanup = datetime.min
         
         while True:
             try:
@@ -667,6 +858,11 @@ class SyncManager:
                     if self.is_online:
                         await self.check_for_updates()
                     last_updates_check = now
+                
+                # Cleanup stati direzioni scaduti ogni 4 ore
+                if (now - last_cleanup).total_seconds() >= 4 * 60 * 60:  # 4 ore
+                    await self.cleanup_expired_direction_states()
+                    last_cleanup = now
                 
                 # Sync completa giornaliera
                 sync_time = datetime.strptime(self.config.daily_sync_time, "%H:%M").time()

@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurazione Avanzata - RFID Gate</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      .config-tabs {
+        display: flex;
+        border-bottom: 2px solid #e9ecef;
+        margin-bottom: 2rem;
+      }
+
+      .config-tab {
+        padding: 1rem 2rem;
+        cursor: pointer;
+        border: none;
+        background: none;
+        color: #6c757d;
+        transition: all 0.3s ease;
+        border-bottom: 3px solid transparent;
+      }
+
+      .config-tab.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+        background: #f8f9fa;
+      }
+
+      .config-tab:hover {
+        background: #f8f9fa;
+      }
+
+      .config-section {
+        display: none;
+        animation: fadeIn 0.3s ease-in-out;
+      }
+
+      .config-section.active {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .config-field {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        transition: all 0.3s ease;
+      }
+
+      .config-field:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+      }
+
+      .config-field label {
+        display: block;
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.5rem;
+      }
+
+      .config-field .description {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-bottom: 0.75rem;
+        font-style: italic;
+      }
+
+      .config-field input,
+      .config-field select,
+      .config-field textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-family: "Courier New", monospace;
+        font-size: 0.875rem;
+      }
+
+      .config-field input:focus,
+      .config-field select:focus,
+      .config-field textarea:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+      }
+
+      .config-field input[type="checkbox"] {
+        width: auto;
+        margin-right: 0.5rem;
+      }
+
+      .section-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        text-align: center;
+      }
+
+      .section-stats {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        text-align: center;
+      }
+
+      .search-box {
+        background: white;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 2rem;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 1rem;
+      }
+
+      .save-section {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        border-top: 2px solid #e9ecef;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .btn-save {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .btn-save:hover {
+        background: #218838;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+      }
+
+      .btn-backup {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        margin-left: 1rem;
+        cursor: pointer;
+      }
+
+      .changed-indicator {
+        background: #ffc107;
+        color: #212529;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <h1>
+            <i class="fas fa-cogs"></i> Configurazione Avanzata - RFID Gate
+          </h1>
+          <div class="user-info">
+            <span id="username">Admin</span>
+            <button onclick="logout()" class="btn btn-logout">
+              <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Navigation -->
+      <nav class="nav">
+        <a href="/" class="nav-item"> <i class="fas fa-home"></i> Home </a>
+        <a href="/dashboard" class="nav-item">
+          <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="/control" class="nav-item">
+          <i class="fas fa-hand-pointer"></i> Controllo Manuale
+        </a>
+        <a href="/logs" class="nav-item">
+          <i class="fas fa-list"></i> Log Accessi
+        </a>
+        <a href="/config" class="nav-item">
+          <i class="fas fa-cog"></i> Config Base
+        </a>
+        <a href="/config/advanced" class="nav-item active">
+          <i class="fas fa-cogs"></i> Config Avanzata
+        </a>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="main">
+        <!-- Stats Section -->
+        <div class="section-stats">
+          <h3><i class="fas fa-chart-bar"></i> Panoramica Configurazioni</h3>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 1rem;
+              margin-top: 1rem;
+            "
+          >
+            <div>
+              <strong>Totale Configurazioni:</strong>
+              <span id="total-configs">95+</span>
+            </div>
+            <div>
+              <strong>Sezioni:</strong>
+              <span id="total-sections">8</span>
+            </div>
+            <div>
+              <strong>Modifiche:</strong>
+              <span id="changes-count">0</span>
+            </div>
+            <div>
+              <strong>Stato:</strong>
+              <span id="config-status">Caricamento...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Box -->
+        <div class="search-box">
+          <input
+            type="text"
+            class="search-input"
+            id="config-search"
+            placeholder="🔍 Cerca configurazione..."
+            onkeyup="filterConfigs()"
+          />
+        </div>
+
+        <!-- Configuration Tabs -->
+        <div class="config-tabs">
+          <button
+            class="config-tab active"
+            onclick="showSection('mqtt')"
+            id="tab-mqtt"
+          >
+            <i class="fas fa-broadcast-tower"></i> MQTT
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('system')"
+            id="tab-system"
+          >
+            <i class="fas fa-microchip"></i> Sistema
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('readers')"
+            id="tab-readers"
+          >
+            <i class="fas fa-wifi"></i> Lettori RFID
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('security')"
+            id="tab-security"
+          >
+            <i class="fas fa-shield-alt"></i> Sicurezza
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('relay')"
+            id="tab-relay"
+          >
+            <i class="fas fa-toggle-on"></i> Relay
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('logging')"
+            id="tab-logging"
+          >
+            <i class="fas fa-file-alt"></i> Logging
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('offline')"
+            id="tab-offline"
+          >
+            <i class="fas fa-cloud-download-alt"></i> Offline
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('sync')"
+            id="tab-sync"
+          >
+            <i class="fas fa-sync"></i> Sync
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('timing')"
+            id="tab-timing"
+          >
+            <i class="fas fa-clock"></i> Timing
+          </button>
+          <button class="config-tab" onclick="showSection('uid')" id="tab-uid">
+            <i class="fas fa-id-card"></i> UID Format
+          </button>
+          <button
+            class="config-tab"
+            onclick="showSection('debug')"
+            id="tab-debug"
+          >
+            <i class="fas fa-bug"></i> Debug
+          </button>
+          <button class="config-tab" onclick="showSection('all')" id="tab-all">
+            <i class="fas fa-list"></i> Tutto
+          </button>
+        </div>
+
+        <!-- Configuration Form -->
+        <form id="advanced-config-form">
+          <!-- MQTT Section -->
+          <div class="config-section active" id="section-mqtt">
+            <div class="section-header">
+              <h2>
+                <i class="fas fa-broadcast-tower"></i> Configurazione MQTT
+              </h2>
+              <p>Impostazioni per la comunicazione MQTT con il broker</p>
+            </div>
+            <div class="config-grid" id="mqtt-fields">
+              <!-- Campi MQTT verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- System Section -->
+          <div class="config-section" id="section-system">
+            <div class="section-header">
+              <h2><i class="fas fa-microchip"></i> Configurazione Sistema</h2>
+              <p>Impostazioni generali del sistema tornello</p>
+            </div>
+            <div class="config-grid" id="system-fields">
+              <!-- Campi Sistema verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Readers Section -->
+          <div class="config-section" id="section-readers">
+            <div class="section-header">
+              <h2><i class="fas fa-wifi"></i> Lettori RFID</h2>
+              <p>Configurazione dei lettori RFID PN532/MFRC522</p>
+            </div>
+            <div class="config-grid" id="readers-fields">
+              <!-- Campi Lettori verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Security Section -->
+          <div class="config-section" id="section-security">
+            <div class="section-header">
+              <h2>
+                <i class="fas fa-shield-alt"></i> Configurazione Sicurezza
+              </h2>
+              <p>Impostazioni di autenticazione e sicurezza</p>
+            </div>
+            <div class="config-grid" id="security-fields">
+              <!-- Campi Security verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Relay Section -->
+          <div class="config-section" id="section-relay">
+            <div class="section-header">
+              <h2><i class="fas fa-toggle-on"></i> Configurazione Relay</h2>
+              <p>Impostazioni controllo relay e attuatori</p>
+            </div>
+            <div class="config-grid" id="relay-fields">
+              <!-- Campi Relay verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Logging Section -->
+          <div class="config-section" id="section-logging">
+            <div class="section-header">
+              <h2><i class="fas fa-file-alt"></i> Configurazione Logging</h2>
+              <p>Impostazioni di logging e file di log</p>
+            </div>
+            <div class="config-grid" id="logging-fields">
+              <!-- Campi Logging verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Offline Section -->
+          <div class="config-section" id="section-offline">
+            <div class="section-header">
+              <h2>
+                <i class="fas fa-cloud-download-alt"></i> Modalità Offline
+              </h2>
+              <p>Configurazione funzionamento offline e cache</p>
+            </div>
+            <div class="config-grid" id="offline-fields">
+              <!-- Campi Offline verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Sync Section -->
+          <div class="config-section" id="section-sync">
+            <div class="section-header">
+              <h2><i class="fas fa-sync"></i> Sincronizzazione</h2>
+              <p>Sistema di sincronizzazione offline-first e backup</p>
+            </div>
+            <div class="config-grid" id="sync-fields">
+              <!-- Campi Sync verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Timing Section -->
+          <div class="config-section" id="section-timing">
+            <div class="section-header">
+              <h2><i class="fas fa-clock"></i> Timing & Performance</h2>
+              <p>Configurazioni di timing, delay e performance</p>
+            </div>
+            <div class="config-grid" id="timing-fields">
+              <!-- Campi Timing verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- UID Section -->
+          <div class="config-section" id="section-uid">
+            <div class="section-header">
+              <h2><i class="fas fa-id-card"></i> Formato UID</h2>
+              <p>Configurazione formato e elaborazione UID carte</p>
+            </div>
+            <div class="config-grid" id="uid-fields">
+              <!-- Campi UID verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- Debug Section -->
+          <div class="config-section" id="section-debug">
+            <div class="section-header">
+              <h2><i class="fas fa-bug"></i> Debug & Logging</h2>
+              <p>Configurazioni per debug, logging e diagnostica</p>
+            </div>
+            <div class="config-grid" id="debug-fields">
+              <!-- Campi Debug verranno popolati dinamicamente -->
+            </div>
+          </div>
+
+          <!-- All Section -->
+          <div class="config-section" id="section-all">
+            <div class="section-header">
+              <h2><i class="fas fa-list"></i> Tutte le Configurazioni</h2>
+              <p>Vista completa di tutte le 95+ configurazioni del sistema</p>
+            </div>
+            <div class="config-grid" id="all-fields">
+              <!-- Tutti i campi verranno popolati dinamicamente -->
+            </div>
+          </div>
+        </form>
+
+        <!-- Save Section -->
+        <div class="save-section">
+          <button type="button" class="btn-save" onclick="saveAdvancedConfig()">
+            <i class="fas fa-save"></i> Salva Configurazione
+            <span
+              id="changes-indicator"
+              class="changed-indicator"
+              style="display: none"
+              >0 modifiche</span
+            >
+          </button>
+          <button type="button" class="btn-backup" onclick="createBackup()">
+            <i class="fas fa-download"></i> Crea Backup
+          </button>
+          <button type="button" class="btn-backup" onclick="showBackups()">
+            <i class="fas fa-history"></i> Ripristina Backup
+          </button>
+        </div>
+      </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+    <script>
+      let allConfigurations = {};
+      let originalConfigurations = {};
+      let changedFields = new Set();
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", function () {
+        // Check authentication first
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          window.location.href = "/login";
+          return;
+        }
+
+        // Initialize RFID Gate UI
+        if (typeof RFIDGateUI !== "undefined") {
+          const app = new RFIDGateUI();
+        }
+
+        loadAdvancedConfig();
+      });
+
+      async function loadAdvancedConfig() {
+        showLoading();
+        try {
+          const response = await authorizedFetch("/api/config/all");
+          const configData = await response.json();
+
+          allConfigurations = configData.data;
+          originalConfigurations = JSON.parse(JSON.stringify(configData.data));
+
+          // Update stats
+          document.getElementById("total-configs").textContent =
+            configData.total_configs;
+          document.getElementById("total-sections").textContent = Object.keys(
+            configData.sections
+          ).length;
+          document.getElementById("config-status").textContent = "Caricato";
+
+          // Populate forms
+          populateAllSections(configData);
+
+          showToast(
+            `Configurazione avanzata caricata: ${configData.total_configs} parametri`,
+            "success"
+          );
+        } catch (error) {
+          console.error("Error loading advanced config:", error);
+          showToast("Errore nel caricamento configurazione avanzata", "error");
+        } finally {
+          hideLoading();
+        }
+      }
+
+      function populateAllSections(configData) {
+        const sections = configData.sections;
+        const descriptions = configData.descriptions;
+
+        // Clear all sections
+        [
+          "mqtt",
+          "system",
+          "readers",
+          "sync",
+          "timing",
+          "uid",
+          "debug",
+          "all",
+        ].forEach((section) => {
+          document.getElementById(`${section}-fields`).innerHTML = "";
+        });
+
+        // Populate each section
+        Object.keys(sections).forEach((sectionName) => {
+          const sectionFields = sections[sectionName];
+          const sectionDescriptions = descriptions[sectionName] || {};
+
+          if (sectionFields && Object.keys(sectionFields).length > 0) {
+            populateSection(sectionName, sectionFields, sectionDescriptions);
+          }
+        });
+
+        // Populate "all" section with everything
+        populateAllSection(configData.data, descriptions);
+      }
+
+      function populateSection(sectionName, fields, descriptions) {
+        const container = document.getElementById(`${sectionName}-fields`);
+        const allContainer = document.getElementById("all-fields");
+
+        Object.keys(fields).forEach((fieldName) => {
+          const fieldValue = allConfigurations[fieldName] || "";
+          const description =
+            descriptions[fieldName] || "Configurazione di sistema";
+
+          const fieldElement = createConfigField(
+            fieldName,
+            fieldValue,
+            description
+          );
+          container.appendChild(fieldElement.cloneNode(true));
+          allContainer.appendChild(fieldElement);
+        });
+      }
+
+      function populateAllSection(allData, descriptions) {
+        const container = document.getElementById("all-fields");
+        container.innerHTML = "";
+
+        // Group by section for better organization
+        const flatDescriptions = {};
+        Object.values(descriptions).forEach((sectionDesc) => {
+          Object.assign(flatDescriptions, sectionDesc);
+        });
+
+        Object.keys(allData)
+          .sort()
+          .forEach((fieldName) => {
+            const fieldValue = allData[fieldName] || "";
+            const description =
+              flatDescriptions[fieldName] || "Configurazione di sistema";
+
+            const fieldElement = createConfigField(
+              fieldName,
+              fieldValue,
+              description
+            );
+            container.appendChild(fieldElement);
+          });
+      }
+
+      function createConfigField(fieldName, fieldValue, description) {
+        const fieldDiv = document.createElement("div");
+        fieldDiv.className = "config-field";
+        fieldDiv.setAttribute("data-field", fieldName.toLowerCase());
+
+        const fieldType = getFieldType(fieldName, fieldValue);
+
+        fieldDiv.innerHTML = `
+          <label for="${fieldName}">${fieldName}</label>
+          <div class="description">${description}</div>
+          ${createInputElement(fieldName, fieldValue, fieldType)}
+        `;
+
+        // Add change listener
+        const input = fieldDiv.querySelector("input, select, textarea");
+        input.addEventListener("change", () => trackChanges(fieldName));
+        input.addEventListener("input", () => trackChanges(fieldName));
+
+        return fieldDiv;
+      }
+
+      function getFieldType(fieldName, fieldValue) {
+        if (fieldName.includes("PASSWORD") || fieldName.includes("SECRET"))
+          return "password";
+        if (
+          fieldName.includes("ENABLED") ||
+          (fieldName.includes("MODE") &&
+            (fieldValue === "True" || fieldValue === "False"))
+        )
+          return "boolean";
+        if (
+          fieldName.includes("PORT") ||
+          fieldName.includes("TIMEOUT") ||
+          fieldName.includes("INTERVAL") ||
+          fieldName.includes("HOURS")
+        )
+          return "number";
+        if (fieldName.includes("URL") || fieldName.includes("BROKER"))
+          return "url";
+        if (fieldValue && fieldValue.length > 50) return "textarea";
+        return "text";
+      }
+
+      function createInputElement(fieldName, fieldValue, fieldType) {
+        switch (fieldType) {
+          case "boolean":
+            return `<input type="checkbox" id="${fieldName}" name="${fieldName}" ${
+              fieldValue === "True" ? "checked" : ""
+            }>`;
+          case "number":
+            return `<input type="number" id="${fieldName}" name="${fieldName}" value="${fieldValue}" step="0.1">`;
+          case "password":
+            return `<input type="password" id="${fieldName}" name="${fieldName}" value="${fieldValue}">`;
+          case "textarea":
+            return `<textarea id="${fieldName}" name="${fieldName}" rows="3">${fieldValue}</textarea>`;
+          case "url":
+            return `<input type="url" id="${fieldName}" name="${fieldName}" value="${fieldValue}">`;
+          default:
+            return `<input type="text" id="${fieldName}" name="${fieldName}" value="${fieldValue}">`;
+        }
+      }
+
+      function trackChanges(fieldName) {
+        const input = document.getElementById(fieldName);
+        let currentValue =
+          input.type === "checkbox"
+            ? input.checked
+              ? "True"
+              : "False"
+            : input.value;
+
+        if (currentValue !== originalConfigurations[fieldName]) {
+          changedFields.add(fieldName);
+        } else {
+          changedFields.delete(fieldName);
+        }
+
+        updateChangesIndicator();
+      }
+
+      function updateChangesIndicator() {
+        const indicator = document.getElementById("changes-indicator");
+        const count = document.getElementById("changes-count");
+
+        if (changedFields.size > 0) {
+          indicator.style.display = "inline";
+          indicator.textContent = `${changedFields.size} modifiche`;
+          count.textContent = changedFields.size;
+        } else {
+          indicator.style.display = "none";
+          count.textContent = "0";
+        }
+      }
+
+      function showSection(sectionName) {
+        // Update tabs
+        document
+          .querySelectorAll(".config-tab")
+          .forEach((tab) => tab.classList.remove("active"));
+        document.getElementById(`tab-${sectionName}`).classList.add("active");
+
+        // Update sections
+        document
+          .querySelectorAll(".config-section")
+          .forEach((section) => section.classList.remove("active"));
+        document
+          .getElementById(`section-${sectionName}`)
+          .classList.add("active");
+      }
+
+      function filterConfigs() {
+        const searchTerm = document
+          .getElementById("config-search")
+          .value.toLowerCase();
+        const allFields = document.querySelectorAll(".config-field");
+
+        allFields.forEach((field) => {
+          const fieldName = field.getAttribute("data-field");
+          const label = field.querySelector("label").textContent.toLowerCase();
+          const description = field
+            .querySelector(".description")
+            .textContent.toLowerCase();
+
+          if (
+            fieldName.includes(searchTerm) ||
+            label.includes(searchTerm) ||
+            description.includes(searchTerm)
+          ) {
+            field.style.display = "block";
+          } else {
+            field.style.display = "none";
+          }
+        });
+      }
+
+      async function saveAdvancedConfig() {
+        if (changedFields.size === 0) {
+          showToast("Nessuna modifica da salvare", "info");
+          return;
+        }
+
+        showLoading();
+        try {
+          // Collect all form data
+          const formData = new FormData(
+            document.getElementById("advanced-config-form")
+          );
+          const configUpdates = {};
+
+          changedFields.forEach((fieldName) => {
+            const input = document.getElementById(fieldName);
+            configUpdates[fieldName] =
+              input.type === "checkbox"
+                ? input.checked
+                  ? "True"
+                  : "False"
+                : input.value;
+          });
+
+          const response = await authorizedFetch("/api/config/advanced", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(configUpdates),
+          });
+
+          if (response.ok) {
+            showToast(
+              `Configurazione salvata: ${changedFields.size} modifiche applicate`,
+              "success"
+            );
+            changedFields.clear();
+            updateChangesIndicator();
+            // Reload to get fresh data
+            await loadAdvancedConfig();
+          } else {
+            throw new Error("Errore nel salvataggio");
+          }
+        } catch (error) {
+          console.error("Error saving config:", error);
+          showToast("Errore nel salvataggio configurazione", "error");
+        } finally {
+          hideLoading();
+        }
+      }
+
+      async function createBackup() {
+        try {
+          const response = await authorizedFetch("/api/config/backup", {
+            method: "POST",
+          });
+          if (response.ok) {
+            showToast("Backup creato con successo", "success");
+          }
+        } catch (error) {
+          showToast("Errore nella creazione backup", "error");
+        }
+      }
+
+      function showBackups() {
+        // TODO: Implement backup management UI
+        showToast("Gestione backup in sviluppo", "info");
+      }
+    </script>
+  </body>
+</html>

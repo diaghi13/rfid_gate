@@ -455,8 +455,29 @@ class AccessControlSystem:
             print(f"❌ Errore invio dati MQTT: {e}")
     
     async def _authenticate_card(self, card_event: CardEvent) -> AccessDecision:
-        """Autentica carta usando strategia offline-first"""
+        """Autentica carta usando strategia offline-first con controllo bidirezionale"""
         try:
+            # 🔄 CONTROLLO BIDIREZIONALE (se abilitato)
+            if self.config.system.bidirectional_mode and self.sync_manager:
+                bidirectional_check = await self.sync_manager.check_bidirectional_access(
+                    card_uid=card_event.uid_formatted,
+                    direction=card_event.direction,
+                    tornello_id=self.config.system.tornello_id
+                )
+                
+                if not bidirectional_check['valid']:
+                    # Log accesso negato per direzione non valida
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result="denied",
+                        reason=f"Controllo bidirezionale: {bidirectional_check['reason']}",
+                        customer_id=None,  # Non abbiamo ancora fatto la validazione
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                    return AccessDecision.DENY
+            
             # 1. Prova prima con SyncManager (cache locale)
             if self.sync_manager and self.config.sync.enabled:
                 sync_result = await self.sync_manager.validate_card_offline(
@@ -465,6 +486,15 @@ class AccessControlSystem:
                 )
                 
                 if sync_result['authorized']:
+                    # ✅ ACCESSO AUTORIZZATO - Aggiorna stato direzione
+                    if self.config.system.bidirectional_mode:
+                        await self.sync_manager.update_user_direction(
+                            card_uid=card_event.uid_formatted,
+                            direction=card_event.direction,
+                            tornello_id=self.config.system.tornello_id,
+                            customer_id=sync_result.get('customer_id')
+                        )
+                    
                     # Log accesso per sync futuro
                     await self.sync_manager.log_access(
                         card_uid=card_event.uid_formatted,
@@ -500,6 +530,15 @@ class AccessControlSystem:
             if self.mode == SystemMode.ONLINE and self.config.auth.enabled:
                 decision = await self._online_authentication(card_event)
                 
+                # ✅ Se accesso autorizzato, aggiorna stato direzione
+                if decision == AccessDecision.GRANT and self.config.system.bidirectional_mode and self.sync_manager:
+                    await self.sync_manager.update_user_direction(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        tornello_id=self.config.system.tornello_id,
+                        customer_id=None  # MQTT non ha customer_id
+                    )
+                
                 # Log anche nel sync manager se disponibile
                 if self.sync_manager:
                     result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
@@ -518,6 +557,15 @@ class AccessControlSystem:
             # 3. Modalità offline legacy
             elif self.mode == SystemMode.OFFLINE:
                 decision = self._offline_authentication(card_event.uid_formatted)
+                
+                # ✅ Se accesso autorizzato, aggiorna stato direzione
+                if decision == AccessDecision.GRANT and self.config.system.bidirectional_mode and self.sync_manager:
+                    await self.sync_manager.update_user_direction(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        tornello_id=self.config.system.tornello_id,
+                        customer_id=None  # Legacy offline non ha customer_id
+                    )
                 
                 if self.sync_manager:
                     result_str = "authorized" if decision == AccessDecision.GRANT else "denied"

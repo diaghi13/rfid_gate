@@ -112,7 +112,7 @@
                 "user",
                 JSON.stringify({
                   username: "admin",
-                  role: "administrator",
+                  role: "admin", // Cambiato da "administrator" a "admin"
                   name: "Demo Admin",
                 })
               );
@@ -124,7 +124,7 @@
 
               // Redirect to dashboard
               setTimeout(() => {
-                window.location.href = "/templates/dashboard.html";
+                window.location.href = "/dashboard";
               }, 1000);
             } else {
               showToast(
@@ -147,7 +147,7 @@
         const token = localStorage.getItem("access_token");
         if (token === "demo-token-12345") {
           // Already logged in, redirect to dashboard
-          window.location.href = "/templates/dashboard.html";
+          window.location.href = "/dashboard";
         }
       });
     </script>
