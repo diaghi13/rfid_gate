@@ -578,13 +578,31 @@ class SyncManager:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.config.connection_timeout)) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
-                        cards_data = await response.json()
-                        self._update_local_cache(cards_data)
-                        self.last_sync = datetime.now()
-                        self.is_online = True
-                        
-                        self.logger.info(f"✅ Sincronizzazione completata: {len(cards_data)} carte aggiornate")
-                        return True
+                        try:
+                            cards_data = await response.json()
+                            # Validate that we got a list
+                            if not isinstance(cards_data, list):
+                                self.logger.error(f"❌ Errore sincronizzazione: risposta non è una lista, ricevuto: {type(cards_data)}")
+                                return False
+                            
+                            # Validate that each item is a dict
+                            for i, card in enumerate(cards_data):
+                                if not isinstance(card, dict):
+                                    self.logger.error(f"❌ Errore sincronizzazione: carta {i} non è un dict, ricevuto: {type(card)}")
+                                    return False
+                            
+                            self._update_local_cache(cards_data)
+                            self.last_sync = datetime.now()
+                            self.is_online = True
+                            
+                            self.logger.info(f"✅ Sincronizzazione completata: {len(cards_data)} carte aggiornate")
+                            return True
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"❌ Errore parsing JSON sincronizzazione: {e}")
+                            return False
+                        except Exception as e:
+                            self.logger.error(f"❌ Errore processing sincronizzazione: {e}")
+                            return False
                     else:
                         self.logger.error(f"❌ Errore sincronizzazione: HTTP {response.status}")
                         return False
@@ -600,21 +618,29 @@ class SyncManager:
         cursor = conn.cursor()
         
         try:
+            # Validate input
+            if not isinstance(cards_data, list):
+                raise ValueError(f"cards_data deve essere una lista, ricevuto: {type(cards_data)}")
+            
             # Disattiva tutte le carte esistenti
             cursor.execute("UPDATE synced_cards SET is_active = 0")
             
             # Inserisci/aggiorna carte sincronizzate
-            for card_data in cards_data:
+            for i, card_data in enumerate(cards_data):
+                if not isinstance(card_data, dict):
+                    self.logger.error(f"Carta {i} non è un dict: {type(card_data)}")
+                    continue
+                
                 cursor.execute('''
                     INSERT OR REPLACE INTO synced_cards 
                     (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
                     VALUES (?, ?, ?, ?, ?, ?, 1)
                 ''', (
-                    card_data['card_uid'],
+                    card_data.get('card_uid'),
                     card_data.get('customer_id'),  # Può essere None/null
-                    card_data['customer_name'],
+                    card_data.get('customer_name'),
                     card_data.get('in_white_list', False),
-                    json.dumps(card_data['active_subscriptions']),
+                    json.dumps(card_data.get('active_subscriptions', [])),
                     datetime.now()
                 ))
             
@@ -629,6 +655,8 @@ class SyncManager:
             
         except Exception as e:
             self.logger.error(f"Errore aggiornamento cache: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
             conn.close()
     
@@ -712,12 +740,30 @@ class SyncManager:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 async with session.get(url, params=params) as response:
                     if response.status == 200:
-                        updates = await response.json()
-                        if updates:
-                            self.logger.info(f"📥 Ricevuti {len(updates)} aggiornamenti")
-                            self._apply_updates(updates)
-                        self.is_online = True
-                        return True
+                        try:
+                            updates = await response.json()
+                            # Validate that we got a list
+                            if not isinstance(updates, list):
+                                self.logger.error(f"❌ Errore updates: risposta non è una lista, ricevuto: {type(updates)}")
+                                return False
+                            
+                            if updates:
+                                # Validate that each update is a dict
+                                for i, update in enumerate(updates):
+                                    if not isinstance(update, dict):
+                                        self.logger.error(f"❌ Errore update {i}: non è un dict, ricevuto: {type(update)}")
+                                        return False
+                                
+                                self.logger.info(f"📥 Ricevuti {len(updates)} aggiornamenti")
+                                self._apply_updates(updates)
+                            self.is_online = True
+                            return True
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"❌ Errore parsing JSON updates: {e}")
+                            return False
+                        except Exception as e:
+                            self.logger.error(f"❌ Errore processing updates: {e}")
+                            return False
                     else:
                         return False
                         
@@ -732,33 +778,48 @@ class SyncManager:
         cursor = conn.cursor()
         
         try:
-            for update in updates:
+            for i, update in enumerate(updates):
+                # Validate update is a dict
+                if not isinstance(update, dict):
+                    self.logger.error(f"Update {i} non è un dict: {type(update)}")
+                    continue
+                
                 action = update.get('action', 'update')
                 
                 if action == 'update':
-                    card_data = update['card_data']
+                    card_data = update.get('card_data')
+                    if not isinstance(card_data, dict):
+                        self.logger.error(f"card_data nell'update {i} non è un dict: {type(card_data)}")
+                        continue
+                    
                     cursor.execute('''
                         INSERT OR REPLACE INTO synced_cards 
                         (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
                         VALUES (?, ?, ?, ?, ?, ?, 1)
                     ''', (
-                        card_data['card_uid'],
+                        card_data.get('card_uid'),
                         card_data.get('customer_id'),  # Può essere None/null
-                        card_data['customer_name'],
+                        card_data.get('customer_name'),
                         card_data.get('in_white_list', False),
-                        json.dumps(card_data['active_subscriptions']),
+                        json.dumps(card_data.get('active_subscriptions', [])),
                         datetime.now()
                     ))
                 elif action == 'delete':
-                    cursor.execute(
-                        'UPDATE synced_cards SET is_active = 0 WHERE card_uid = ?',
-                        (update['card_uid'],)
-                    )
+                    card_uid = update.get('card_uid')
+                    if card_uid:
+                        cursor.execute(
+                            'UPDATE synced_cards SET is_active = 0 WHERE card_uid = ?',
+                            (card_uid,)
+                        )
+                    else:
+                        self.logger.error(f"Update delete {i} manca card_uid")
             
             conn.commit()
             
         except Exception as e:
             self.logger.error(f"Errore applicazione updates: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
             conn.close()
     
