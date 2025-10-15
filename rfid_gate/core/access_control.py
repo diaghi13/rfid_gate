@@ -205,7 +205,7 @@ class AccessControlSystem:
             for direction, relay in self.relays.items():
                 if relay:
                     try:
-                        relay.close()
+                        await relay.close()
                         print(f"   ✅ Relè {direction} chiuso")
                     except Exception as e:
                         print(f"   ⚠️ Errore chiusura relè {direction}: {e}")

@@ -295,9 +295,10 @@ class GPIORelayController(BaseRelayController):
         """Cleanup del relè GPIO"""
         try:
             if self.is_setup and HAS_HARDWARE:
-                # Resetta pin a stato iniziale
-                GPIO.output(self.pin, self.initial_state_value)
-                print(f"🧹 {self.relay_id} cleanup - pin {self.pin} reset")
+                # Resetta pin a stato iniziale (stesso calcolo dell'inizializzazione)
+                initial_gpio_state = GPIO.HIGH if self.initial_state == "HIGH" else GPIO.LOW
+                GPIO.output(self.pin, initial_gpio_state)
+                print(f"🧹 {self.relay_id} cleanup - pin {self.pin} reset a {self.initial_state}")
             
             # Rimuovi dalla registry globale
             if self in self._global_relays:
