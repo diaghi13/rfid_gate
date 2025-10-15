@@ -196,6 +196,7 @@ class GPIORelayController(BaseRelayController):
             bool: True se operazione riuscita
         """
         if not self.is_setup or not HAS_HARDWARE:
+            print(f"🚫 {self.relay_id}: GPIO non disponibile (is_setup={self.is_setup}, HAS_HARDWARE={HAS_HARDWARE})")
             return False
         
         try:
@@ -203,11 +204,15 @@ class GPIORelayController(BaseRelayController):
             if self.active_low:
                 # Con active_low=True: ON=LOW, OFF=HIGH
                 gpio_state = GPIO.LOW if state else GPIO.HIGH
+                logic_explanation = f"active_low=True → {state}={'LOW' if state else 'HIGH'}"
             else:
                 # Con active_low=False: ON=HIGH, OFF=LOW  
                 gpio_state = GPIO.HIGH if state else GPIO.LOW
+                logic_explanation = f"active_low=False → {state}={'HIGH' if state else 'LOW'}"
                 
+            print(f"🔧 {self.relay_id}: GPIO.output(pin={self.pin}, state={'HIGH' if gpio_state else 'LOW'}) - {logic_explanation}")
             GPIO.output(self.pin, gpio_state)
+            print(f"✅ {self.relay_id}: GPIO command completed successfully")
             return True
             
         except Exception as e:

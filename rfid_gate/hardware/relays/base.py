@@ -240,16 +240,38 @@ class BaseRelayController(ABC):
         duration = duration or self.active_time
         
         with self._thread_lock:
-            # Ferma thread precedente se ancora in corso
+            # GESTIONE LEGACY-COMPATIBLE: Interrompi thread precedente
             if self._activation_thread and self._activation_thread.is_alive():
+                print(f"🔄 {self.relay_id}: Interruzione thread precedente in corso...")
                 self._stop_thread = True
-                # Non fare join per evitare blocchi
+                
+                # Aspetta brevemente che il thread precedente si fermi
+                old_thread = self._activation_thread
+                self._activation_thread = None
+                
+                # Release lock temporaneamente per permettere al thread di terminare
+                self._thread_lock.release()
+                try:
+                    # Breve attesa per permettere al thread di vedere _stop_thread
+                    time.sleep(0.05)  # 50ms dovrebbero bastare
+                    
+                    # Se il thread è ancora vivo dopo il timeout, procedi comunque
+                    if old_thread.is_alive():
+                        print(f"⚠️ {self.relay_id}: Thread precedente ancora attivo, procedo comunque")
+                    else:
+                        print(f"✅ {self.relay_id}: Thread precedente terminato correttamente")
+                        
+                finally:
+                    self._thread_lock.acquire()
             
+            # Reset flag per nuovo thread
             self._stop_thread = False
             
         try:
             self.set_state(RelayState.ACTIVATING, duration, trigger_source)
             self.stats['activations_total'] += 1
+            
+            print(f"🧵 {self.relay_id}: Avvio nuovo thread per {duration}s...")
             
             # Crea Thread per attivazione temporizzata (COME NEL LEGACY)
             self._activation_thread = threading.Thread(
@@ -274,41 +296,59 @@ class BaseRelayController(ABC):
     def _thread_activation_worker(self, duration: float, trigger_source: str) -> None:
         """Worker thread per attivazione temporizzata (IDENTICO AL LEGACY)"""
         current_thread = threading.current_thread()
+        thread_name = current_thread.name
+        
+        print(f"🧵 THREAD START: {self.relay_id} worker avviato (ID: {thread_name})")
         
         try:
             start_time = time.time()
             
             # Attiva relè (sincrono diretto come nel legacy)
             target_state = not self.active_low  # ON
+            print(f"🔛 {self.relay_id}: Tentativo attivazione (target_state={target_state}, active_low={self.active_low})")
+            
             success = self._sync_hardware_set_state(target_state)
             
             if not success:
+                print(f"❌ {self.relay_id}: Fallimento attivazione hardware")
                 raise Exception("Fallimento attivazione hardware")
             
             self.set_state(RelayState.ON, duration, trigger_source)
             self.last_activation_time = start_time
             self.activation_count += 1
             
-            print(f"⚡ {self.relay_id}: ON per {duration}s")
+            print(f"⚡ {self.relay_id}: ON per {duration}s (thread {thread_name})")
             
             # Aspetta con controlli di interruzione (COME NEL LEGACY)
             elapsed = 0
+            check_count = 0
             while elapsed < duration:
                 with self._thread_lock:
                     if self._stop_thread:
+                        print(f"🛑 {self.relay_id}: Thread interrotto da _stop_thread")
                         return
                 
                 sleep_time = min(0.1, duration - elapsed)
                 time.sleep(sleep_time)
                 elapsed += sleep_time
+                check_count += 1
+                
+                # Log ogni secondo per debug
+                if check_count % 10 == 0:
+                    print(f"⏱️  {self.relay_id}: T+{elapsed:.1f}s (thread {thread_name} attivo)")
+            
+            print(f"⏰ {self.relay_id}: Timer completato dopo {elapsed:.2f}s - Disattivazione...")
             
             # Disattiva relè
             with self._thread_lock:
                 if not self._stop_thread:
                     target_state = self.active_low  # OFF
+                    print(f"🔛 {self.relay_id}: Tentativo disattivazione (target_state={target_state})")
+                    
                     success = self._sync_hardware_set_state(target_state)
                     
                     if not success:
+                        print(f"❌ {self.relay_id}: Fallimento disattivazione hardware")
                         raise Exception("Fallimento disattivazione hardware")
                     
                     # Aggiorna statistiche
@@ -318,15 +358,20 @@ class BaseRelayController(ABC):
                     self.stats['total_on_time_seconds'] = self.total_on_time
                     
                     self.set_state(RelayState.OFF, trigger_source=trigger_source)
-                    print(f"✅ {self.relay_id}: OFF dopo {actual_duration:.2f}s")
+                    print(f"✅ {self.relay_id}: OFF dopo {actual_duration:.2f}s (thread {thread_name})")
+                else:
+                    print(f"🛑 {self.relay_id}: Disattivazione saltata - thread fermato")
             
         except Exception as e:
+            print(f"💥 {self.relay_id}: EXCEPTION nel thread {thread_name}: {e}")
             with self._thread_lock:
                 # Spegni in caso di errore
                 try:
+                    print(f"🔧 {self.relay_id}: Tentativo spegnimento di emergenza...")
                     self._sync_hardware_set_state(self.active_low)
-                except:
-                    pass
+                    print(f"✅ {self.relay_id}: Spegnimento di emergenza completato")
+                except Exception as emergency_e:
+                    print(f"💥 {self.relay_id}: ERRORE anche nello spegnimento di emergenza: {emergency_e}")
                 
                 self.set_state(RelayState.ERROR, trigger_source=trigger_source)
                 self.stats['activations_failed'] += 1
@@ -335,6 +380,9 @@ class BaseRelayController(ABC):
                     self.on_error(e)
                 
                 print(f"❌ {self.relay_id} errore durante attivazione thread: {e}")
+        
+        finally:
+            print(f"🧵 THREAD END: {self.relay_id} worker terminato (ID: {thread_name})")
     
     @abstractmethod
     def _sync_hardware_set_state(self, state: bool) -> bool:
