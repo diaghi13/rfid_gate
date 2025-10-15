@@ -18,6 +18,7 @@ import sqlite3
 import logging
 import time
 import threading
+import ssl
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from pathlib import Path
@@ -34,7 +35,7 @@ except ImportError:
     # Mock per development
     class aiohttp:
         class ClientSession:
-            def __init__(self, timeout=None): pass
+            def __init__(self, timeout=None, connector=None): pass
             async def __aenter__(self): return self
             async def __aexit__(self, *args): pass
             async def get(self, url, params=None): return MockResponse()
@@ -42,6 +43,9 @@ except ImportError:
         
         class ClientTimeout:
             def __init__(self, total=None): pass
+            
+        class TCPConnector:
+            def __init__(self, ssl=None): pass
 
 try:
     import requests
@@ -124,7 +128,55 @@ class SyncManager:
         # Inizializza database
         self._init_database()
         
+        # Scheduler per sync automatiche
+        self.scheduler_thread: Optional[threading.Thread] = None
+        self.running = False
+        
         self.logger.info(f"🔄 SyncManager inizializzato per {tornello_id}")
+    
+    def _create_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Crea SSL context per gestire certificati self-signed o non verificabili"""
+        if not HAS_AIOHTTP:
+            return None
+            
+        try:
+            # Crea context SSL che non verifica i certificati
+            # NOTA: Questo è per development/testing - in produzione usare certificati validi
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            self.logger.debug("🔒 SSL context configurato (verificazione disabilitata)")
+            return ssl_context
+        except Exception as e:
+            self.logger.warning(f"⚠️ Errore creazione SSL context: {e}")
+            return None
+    
+    def _create_aiohttp_session(self, timeout_seconds: int) -> 'aiohttp.ClientSession':
+        """Crea una sessione aiohttp con configurazione SSL appropriata"""
+        if not HAS_AIOHTTP:
+            return aiohttp.ClientSession()
+            
+        try:
+            # Crea SSL context
+            ssl_context = self._create_ssl_context()
+            
+            # Crea connector con SSL context
+            connector = aiohttp.TCPConnector(ssl=ssl_context) if ssl_context else None
+            
+            # Crea timeout
+            timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+            
+            # Crea sessione
+            if connector:
+                return aiohttp.ClientSession(timeout=timeout, connector=connector)
+            else:
+                return aiohttp.ClientSession(timeout=timeout)
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Errore creazione sessione aiohttp: {e}")
+            # Fallback a sessione standard
+            return aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds))
     
     def _init_database(self):
         """Inizializza database SQLite per cache locale"""
@@ -575,21 +627,54 @@ class SyncManager:
             
             url = f"{self.config.server_url}{self.config.sync_endpoint}"
             
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.config.connection_timeout)) as session:
+            async with self._create_aiohttp_session(self.config.connection_timeout) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
                         try:
-                            cards_data = await response.json()
-                            # Validate that we got a list
-                            if not isinstance(cards_data, list):
-                                self.logger.error(f"❌ Errore sincronizzazione: risposta non è una lista, ricevuto: {type(cards_data)}")
+                            response_data = await response.json()
+                            
+                            # Supporta diversi formati di risposta dal server:
+                            if isinstance(response_data, dict):
+                                if 'data' in response_data:
+                                    # Formato principale: {"success": true, "data": [...]}
+                                    if not response_data.get('success', False):
+                                        self.logger.error(f"❌ Errore sincronizzazione: server ha restituito success=false")
+                                        return False
+                                    cards_data = response_data['data']
+                                elif 'card_data' in response_data:
+                                    # Formato updates: {"action": "update", "card_data": [...]}
+                                    action = response_data.get('action', 'unknown')
+                                    self.logger.debug(f"🔄 Azione ricevuta dal server: {action}")
+                                    cards_data = response_data['card_data']
+                                else:
+                                    self.logger.error(f"❌ Errore sincronizzazione: formato risposta non riconosciuto: {type(response_data)}")
+                                    self.logger.debug(f"Contenuto ricevuto: {str(response_data)[:200]}...")
+                                    return False
+                            elif isinstance(response_data, list):
+                                # Backward compatibility: array diretto
+                                cards_data = response_data
+                            else:
+                                self.logger.error(f"❌ Errore sincronizzazione: formato risposta non riconosciuto: {type(response_data)}")
+                                self.logger.debug(f"Contenuto ricevuto: {str(response_data)[:200]}...")
                                 return False
                             
-                            # Validate that each item is a dict
+                            # Validate that cards_data is a list
+                            if not isinstance(cards_data, list):
+                                self.logger.error(f"❌ Errore sincronizzazione: card_data non è una lista, ricevuto: {type(cards_data)}")
+                                return False
+                            
+                            # Validate that each item is a dict with required fields
                             for i, card in enumerate(cards_data):
                                 if not isinstance(card, dict):
                                     self.logger.error(f"❌ Errore sincronizzazione: carta {i} non è un dict, ricevuto: {type(card)}")
                                     return False
+                                
+                                # Check required fields
+                                required_fields = ['card_uid', 'customer_name', 'in_white_list']
+                                for field in required_fields:
+                                    if field not in card:
+                                        self.logger.error(f"❌ Errore sincronizzazione: carta {i} manca campo '{field}'")
+                                        return False
                             
                             self._update_local_cache(cards_data)
                             self.last_sync = datetime.now()
@@ -703,7 +788,7 @@ class SyncManager:
             # Invia al server
             url = f"{self.config.server_url}{self.config.logs_endpoint}"
             
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+            async with self._create_aiohttp_session(15) as session:
                 async with session.post(url, json={'logs': logs_to_send}) as response:
                     if response.status == 200:
                         # Marca come sincronizzati
@@ -733,18 +818,31 @@ class SyncManager:
         try:
             params = {}
             if self.last_sync:
-                params['since'] = self.last_sync.isoformat()
+                params['last_update'] = self.last_sync.isoformat()
             
             url = f"{self.config.server_url}{self.config.updates_endpoint}"
             
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with self._create_aiohttp_session(10) as session:
                 async with session.get(url, params=params) as response:
                     if response.status == 200:
                         try:
-                            updates = await response.json()
-                            # Validate that we got a list
+                            response_data = await response.json()
+                            
+                            # Supporta il nuovo formato: {"action": "update", "card_data": [...]}
+                            if isinstance(response_data, dict) and 'card_data' in response_data:
+                                action = response_data.get('action', 'update')
+                                self.logger.debug(f"🔄 Azione ricevuta: {action}")
+                                updates = response_data['card_data']
+                            elif isinstance(response_data, list):
+                                # Backward compatibility: array diretto
+                                updates = response_data
+                            else:
+                                self.logger.error(f"❌ Errore updates: formato risposta non riconosciuto: {type(response_data)}")
+                                return False
+                            
+                            # Validate that updates is a list
                             if not isinstance(updates, list):
-                                self.logger.error(f"❌ Errore updates: risposta non è una lista, ricevuto: {type(updates)}")
+                                self.logger.error(f"❌ Errore updates: card_data non è una lista, ricevuto: {type(updates)}")
                                 return False
                             
                             if updates:
@@ -755,7 +853,27 @@ class SyncManager:
                                         return False
                                 
                                 self.logger.info(f"📥 Ricevuti {len(updates)} aggiornamenti")
-                                self._apply_updates(updates)
+                                
+                                # Trasforma il formato per _apply_updates se necessario
+                                if isinstance(response_data, dict) and 'card_data' in response_data:
+                                    # Formato: {"action": "update", "card_data": [...]}
+                                    # Trasforma ogni carta in un update con action
+                                    action = response_data.get('action', 'update')
+                                    formatted_updates = []
+                                    for card in updates:
+                                        formatted_updates.append({
+                                            'action': action,
+                                            'card_data': card
+                                        })
+                                    self._apply_updates(formatted_updates)
+                                else:
+                                    # Formato legacy: array di updates già formattati
+                                    self._apply_updates(updates)
+                                
+                                self.last_sync = datetime.now()
+                            else:
+                                self.logger.info("📥 Nessun aggiornamento disponibile")
+                            
                             self.is_online = True
                             return True
                         except json.JSONDecodeError as e:
@@ -785,6 +903,7 @@ class SyncManager:
                     continue
                 
                 action = update.get('action', 'update')
+                self.logger.debug(f"🔄 Applicando azione: {action} per update {i}")
                 
                 if action == 'update':
                     card_data = update.get('card_data')
@@ -792,29 +911,44 @@ class SyncManager:
                         self.logger.error(f"card_data nell'update {i} non è un dict: {type(card_data)}")
                         continue
                     
+                    card_uid = card_data.get('card_uid')
+                    if not card_uid:
+                        self.logger.error(f"Update {i} manca card_uid")
+                        continue
+                    
                     cursor.execute('''
                         INSERT OR REPLACE INTO synced_cards 
                         (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
                         VALUES (?, ?, ?, ?, ?, ?, 1)
                     ''', (
-                        card_data.get('card_uid'),
+                        card_uid,
                         card_data.get('customer_id'),  # Può essere None/null
                         card_data.get('customer_name'),
                         card_data.get('in_white_list', False),
                         json.dumps(card_data.get('active_subscriptions', [])),
                         datetime.now()
                     ))
+                    self.logger.debug(f"✅ Aggiornata carta: {card_uid}")
+                    
                 elif action == 'delete':
+                    # Può essere card_uid diretto nell'update o dentro card_data
                     card_uid = update.get('card_uid')
+                    if not card_uid and 'card_data' in update:
+                        card_uid = update['card_data'].get('card_uid')
+                    
                     if card_uid:
                         cursor.execute(
                             'UPDATE synced_cards SET is_active = 0 WHERE card_uid = ?',
                             (card_uid,)
                         )
+                        self.logger.debug(f"🗑️ Disattivata carta: {card_uid}")
                     else:
                         self.logger.error(f"Update delete {i} manca card_uid")
+                else:
+                    self.logger.warning(f"⚠️ Azione sconosciuta nell'update {i}: {action}")
             
             conn.commit()
+            self.logger.info(f"✅ Applicati {len(updates)} aggiornamenti al database locale")
             
         except Exception as e:
             self.logger.error(f"Errore applicazione updates: {e}")
@@ -828,7 +962,7 @@ class SyncManager:
         try:
             url = f"{self.config.server_url}{self.config.health_endpoint}"
             
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with self._create_aiohttp_session(5) as session:
                 async with session.get(url) as response:
                     self.is_online = response.status == 200
                     return self.is_online
