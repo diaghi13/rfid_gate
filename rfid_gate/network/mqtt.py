@@ -602,8 +602,8 @@ class AsyncMQTTClient:
                 "reader_id": card_message.reader_id
             }
             
-            # Topic dinamico (manteniamo il nuovo formato topic)
-            topic = f"gate/{card_message.identificativo_tornello}/card_read"
+            # Topic dinamico usando configurazione .env
+            topic = self.config.card_read_topic
             
             # Crea messaggio MQTT
             mqtt_msg = MQTTMessage(
@@ -651,8 +651,9 @@ class AsyncMQTTClient:
                 "auth_required": auth_request.auth_required
             }
             
-            # Topic dinamico (manteniamo il nuovo formato topic)
-            topic = f"gate/{auth_request.identificativo_tornello}/auth_request"
+            # Topic dinamico basato su auth_response_topic configurato
+            base_topic = '/'.join(self.config.auth_response_topic.split('/')[:-1])
+            topic = f"{base_topic}/auth_request"
             
             # Registra richiesta pending per tracking interno
             self.pending_auths[request_id] = auth_request
@@ -704,8 +705,9 @@ class AsyncMQTTClient:
                 "auth_required": auth_request.auth_required
             }
             
-            # Topic dinamico
-            topic = f"gate/{auth_request.identificativo_tornello}/auth_request"
+            # Topic dinamico basato su configurazione
+            base_topic = '/'.join(self.config.auth_response_topic.split('/')[:-1])
+            topic = f"{base_topic}/auth_request"
             
             # Crea messaggio MQTT
             mqtt_msg = MQTTMessage(
