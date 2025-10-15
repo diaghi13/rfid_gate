@@ -23,6 +23,7 @@ from rfid_gate.hardware.readers.base import BaseRFIDReader, CardEvent
 from rfid_gate.hardware.relays.gpio import GPIORelayController
 from rfid_gate.hardware.relays.base import BaseRelayController, RelayEvent
 from rfid_gate.network.mqtt import AsyncMQTTClient, CardReadMessage, AuthRequest
+from rfid_gate.network.sync_manager import SyncManager
 from rfid_gate.utils.debounce import GlobalDebounceManager
 
 
@@ -80,6 +81,7 @@ class AccessControlSystem:
         self.readers: Dict[str, BaseRFIDReader] = {}
         self.relays: Dict[str, BaseRelayController] = {}
         self.mqtt_client: Optional[AsyncMQTTClient] = None
+        self.sync_manager: Optional[SyncManager] = None
         self.debounce_manager = GlobalDebounceManager(self.config.system.global_debounce_time)
         
         # Stato sistema
@@ -144,7 +146,13 @@ class AccessControlSystem:
                 print("❌ Inizializzazione relè fallita")
                 return False
             
-            # 4. Inizializza MQTT client
+            # 4. Inizializza SyncManager (se abilitato)
+            if self.config.sync.enabled:
+                success = await self._initialize_sync_manager()
+                if not success:
+                    print("⚠️ SyncManager non disponibile")
+            
+            # 5. Inizializza MQTT client
             success = await self._initialize_mqtt()
             if not success:
                 print("⚠️ MQTT non disponibile, modalità offline")
@@ -152,10 +160,10 @@ class AccessControlSystem:
             else:
                 self.mode = SystemMode.ONLINE
             
-            # 5. Setup callbacks
+            # 6. Setup callbacks
             self._setup_callbacks()
             
-            # 6. Avvia monitoring
+            # 7. Avvia monitoring
             self._monitor_task = asyncio.create_task(self._system_monitor())
             
             self.start_time = time.time()
@@ -257,6 +265,33 @@ class AccessControlSystem:
             print(f"❌ Errore inizializzazione relè: {e}")
             return False
     
+    async def _initialize_sync_manager(self) -> bool:
+        """Inizializza SyncManager per cache offline"""
+        try:
+            print("🔄 Inizializzazione SyncManager...")
+            
+            self.sync_manager = SyncManager(
+                config=self.config.sync,
+                tornello_id=self.config.system.tornello_id
+            )
+            
+            # Avvia background sync
+            await self.sync_manager.start_background_sync()
+            
+            # Prova una sync iniziale se online
+            connectivity = await self.sync_manager.check_connectivity()
+            if connectivity:
+                await self.sync_manager.daily_sync()
+                print("✅ SyncManager inizializzato e sincronizzato")
+            else:
+                print("✅ SyncManager inizializzato (modalità offline)")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Errore inizializzazione SyncManager: {e}")
+            return False
+
     async def _initialize_mqtt(self) -> bool:
         """Inizializza client MQTT"""
         try:
@@ -421,18 +456,91 @@ class AccessControlSystem:
             print(f"❌ Errore invio dati MQTT: {e}")
     
     async def _authenticate_card(self, card_event: CardEvent) -> AccessDecision:
-        """Autentica carta e restituisce decisione"""
+        """Autentica carta usando strategia offline-first"""
         try:
-            if self.mode == SystemMode.OFFLINE:
-                # Modalità offline - usa cache locale
-                return self._offline_authentication(card_event.uid_formatted)
+            # 1. Prova prima con SyncManager (cache locale)
+            if self.sync_manager and self.config.sync.enabled:
+                sync_result = await self.sync_manager.validate_card_offline(
+                    card_event.uid_formatted, 
+                    card_event.direction
+                )
+                
+                if sync_result['authorized']:
+                    # Log accesso per sync futuro
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result="authorized",
+                        reason=sync_result['reason'],
+                        customer_name=sync_result.get('customer_name'),
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                    return AccessDecision.GRANT
+                
+                # Se non autorizzata dalla cache ma il SyncManager è offline, 
+                # prova MQTT come fallback
+                if not self.sync_manager.is_online and self.mode == SystemMode.ONLINE:
+                    pass  # Continua con MQTT
+                else:
+                    # Log accesso negato
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result="denied",
+                        reason=sync_result['reason'],
+                        customer_name=sync_result.get('customer_name'),
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                    return AccessDecision.DENY
             
-            elif self.mode == SystemMode.ONLINE and self.config.auth.enabled:
-                # Modalità online - autentica via MQTT
-                return await self._online_authentication(card_event)
+            # 2. Fallback MQTT se online e abilitato
+            if self.mode == SystemMode.ONLINE and self.config.auth.enabled:
+                decision = await self._online_authentication(card_event)
+                
+                # Log anche nel sync manager se disponibile
+                if self.sync_manager:
+                    result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result=result_str,
+                        reason=f"MQTT auth: {decision.value}",
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                
+                return decision
+            
+            # 3. Modalità offline legacy
+            elif self.mode == SystemMode.OFFLINE:
+                decision = self._offline_authentication(card_event.uid_formatted)
+                
+                if self.sync_manager:
+                    result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result=result_str,
+                        reason=f"Offline legacy: {decision.value}",
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                
+                return decision
             
             else:
-                # Accesso sempre consentito se auth disabilitata
+                # Auth disabilitata - accesso sempre consentito
+                if self.sync_manager:
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result="authorized",
+                        reason="Autenticazione disabilitata",
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
                 return AccessDecision.GRANT
                 
         except Exception as e:
@@ -670,6 +778,13 @@ class AccessControlSystem:
             
             if self._monitor_task and not self._monitor_task.done():
                 self._monitor_task.cancel()
+            
+            # Cleanup SyncManager
+            if self.sync_manager:
+                await self.sync_manager.stop_background_sync()
+                # Ultima sync log se possibile
+                if self.sync_manager.is_online:
+                    await self.sync_manager._sync_logs()
             
             # Cleanup componenti
             for reader in self.readers.values():

@@ -192,6 +192,31 @@ class OfflineConfig:
 
 
 @dataclass
+class SyncConfig:
+    """Configurazione sistema di sincronizzazione"""
+    enabled: bool = True
+    server_url: str = "http://localhost:3000"
+    sync_endpoint: str = "/api/sync"
+    logs_endpoint: str = "/api/logs/bulk"
+    health_endpoint: str = "/api/health"
+    updates_endpoint: str = "/api/cards/updates"
+    
+    # Timing
+    daily_sync_time: str = "06:00"
+    updates_check_interval: int = 15  # minuti
+    logs_sync_interval: int = 5  # minuti
+    connection_timeout: int = 30  # secondi
+    
+    # Database
+    cache_db_path: str = "cache/local_cache.db"
+    max_pending_logs: int = 1000
+    
+    # Retry logic
+    max_retries: int = 3
+    retry_delay: int = 5  # secondi
+
+
+@dataclass
 class LoggingConfig:
     """Configurazione logging"""
     directory: str = "logs"
@@ -216,6 +241,7 @@ class RFIDGateConfig:
     relay_out: RelayConfig = field(default_factory=RelayConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     offline: OfflineConfig = field(default_factory=OfflineConfig)
+    sync: SyncConfig = field(default_factory=SyncConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     
     @classmethod
@@ -320,6 +346,24 @@ class RFIDGateConfig:
             enable_console_log=os.getenv('ENABLE_CONSOLE_LOG', 'False').lower() == 'true'
         )
         
+        # Sync Config
+        sync = SyncConfig(
+            enabled=os.getenv('SYNC_ENABLED', 'True').lower() == 'true',
+            server_url=os.getenv('SYNC_SERVER_URL', 'http://localhost:3000'),
+            sync_endpoint=os.getenv('SYNC_ENDPOINT', '/api/sync'),
+            logs_endpoint=os.getenv('SYNC_LOGS_ENDPOINT', '/api/logs/bulk'),
+            health_endpoint=os.getenv('SYNC_HEALTH_ENDPOINT', '/api/health'),
+            updates_endpoint=os.getenv('SYNC_UPDATES_ENDPOINT', '/api/cards/updates'),
+            daily_sync_time=os.getenv('SYNC_DAILY_TIME', '06:00'),
+            updates_check_interval=int(os.getenv('SYNC_UPDATES_INTERVAL', 15)),
+            logs_sync_interval=int(os.getenv('SYNC_LOGS_INTERVAL', 5)),
+            connection_timeout=int(os.getenv('SYNC_CONNECTION_TIMEOUT', 30)),
+            cache_db_path=os.getenv('SYNC_CACHE_DB_PATH', 'cache/local_cache.db'),
+            max_pending_logs=int(os.getenv('SYNC_MAX_PENDING_LOGS', 1000)),
+            max_retries=int(os.getenv('SYNC_MAX_RETRIES', 3)),
+            retry_delay=int(os.getenv('SYNC_RETRY_DELAY', 5))
+        )
+        
         return cls(
             mqtt=mqtt,
             system=system,
@@ -329,6 +373,7 @@ class RFIDGateConfig:
             relay_out=relay_out,
             auth=auth,
             offline=offline,
+            sync=sync,
             logging=logging_config
         )
     
