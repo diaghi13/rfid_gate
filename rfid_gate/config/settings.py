@@ -309,13 +309,13 @@ class RFIDGateConfig:
         
         # RFID OUT Config
         rfid_out = RFIDReaderConfig(
-            enabled=os.getenv('RFID_OUT_ENABLE', 'False').lower() == 'true',
+            enabled=os.getenv('RFID_OUT_ENABLED', 'False').lower() == 'true',
             reader_type=ReaderType(os.getenv('RFID_OUT_READER_TYPE', 'mfrc522')),
             rst_pin=int(os.getenv('RFID_OUT_RST_PIN', 25)),
             sda_pin=int(os.getenv('RFID_OUT_SDA_PIN', 7)),
             pn532_interface=PN532Interface(os.getenv('RFID_OUT_PN532_INTERFACE', 'i2c')),
             pn532_i2c_address=int(os.getenv('RFID_OUT_PN532_I2C_ADDRESS', '0x25'), 16),
-            pn532_spi_bus=int(os.getenv('RFID_OUT_PN532_SPI_BUS', '1')),
+            pn532_spi_bus=int(os.getenv('RFID_OUT_PN532_SPI_BUS', '0')),
             pn532_spi_device=int(os.getenv('RFID_OUT_PN532_SPI_DEVICE', '0')),
             pn532_uart_port=os.getenv('RFID_OUT_PN532_UART_PORT', '/dev/serial1'),
             pn532_uart_baudrate=int(os.getenv('RFID_OUT_PN532_UART_BAUDRATE', '115200'))

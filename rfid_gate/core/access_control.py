@@ -174,6 +174,63 @@ class AccessControlSystem:
             print(f"❌ Errore inizializzazione sistema: {e}")
             return False
     
+    async def start(self) -> bool:
+        """Avvia il sistema (alias per initialize per compatibilità con monitor tools)"""
+        return await self.initialize()
+    
+    async def stop(self) -> None:
+        """Ferma il sistema e libera le risorse"""
+        try:
+            print("🛑 Arresto sistema di controllo accessi...")
+            
+            # Ferma task di monitoring
+            if hasattr(self, '_monitor_task') and self._monitor_task:
+                self._monitor_task.cancel()
+                try:
+                    await self._monitor_task
+                except asyncio.CancelledError:
+                    pass
+                print("   ✅ Monitor task fermato")
+            
+            # Ferma lettori RFID
+            for direction, reader in self.readers.items():
+                if reader:
+                    try:
+                        await reader.cleanup()
+                        print(f"   ✅ Lettore {direction} fermato")
+                    except Exception as e:
+                        print(f"   ⚠️ Errore arresto lettore {direction}: {e}")
+            
+            # Ferma relè (resetta a stato chiuso)
+            for direction, relay in self.relays.items():
+                if relay:
+                    try:
+                        relay.close()
+                        print(f"   ✅ Relè {direction} chiuso")
+                    except Exception as e:
+                        print(f"   ⚠️ Errore chiusura relè {direction}: {e}")
+            
+            # Disconnetti MQTT
+            if self.mqtt_client:
+                try:
+                    await self.mqtt_client.disconnect()
+                    print("   ✅ MQTT disconnesso")
+                except Exception as e:
+                    print(f"   ⚠️ Errore disconnessione MQTT: {e}")
+            
+            # Ferma sync manager
+            if hasattr(self, 'sync_manager') and self.sync_manager:
+                try:
+                    await self.sync_manager.stop()
+                    print("   ✅ Sync manager fermato")
+                except Exception as e:
+                    print(f"   ⚠️ Errore arresto sync manager: {e}")
+            
+            print("✅ Sistema arrestato correttamente")
+            
+        except Exception as e:
+            print(f"❌ Errore durante arresto sistema: {e}")
+    
     async def _initialize_readers(self) -> bool:
         """Inizializza lettori RFID"""
         try:
