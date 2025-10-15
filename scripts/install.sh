@@ -538,11 +538,11 @@ try:
     from rfid_gate.config.settings import RFIDGateConfig
     config = RFIDGateConfig.from_env()
     print('✅ Config caricata correttamente')
-    print(f'   Tornello ID: {config.tornello_id}')
-    print(f'   MQTT Broker: {config.mqtt_broker}')
-    print(f'   Modalità bidirezionale: {config.bidirectional_mode}')
-    print(f'   Lettore IN: {config.rfid_in_reader_type}')
-    print(f'   Lettore OUT: {config.rfid_out_reader_type if config.enable_out_reader else "Disabilitato"}')
+    print(f'   Tornello ID: {config.system.tornello_id}')
+    print(f'   MQTT Broker: {config.mqtt.broker}')
+    print(f'   Modalità bidirezionale: {config.system.bidirectional_mode}')
+    print(f'   Lettore IN: {config.rfid_in.reader_type.value}')
+    print(f'   Lettore OUT: {config.rfid_out.reader_type.value if config.system.enable_out_reader else "Disabilitato"}')
 except Exception as e:
     print(f'❌ Errore: {e}')
     exit(1)
