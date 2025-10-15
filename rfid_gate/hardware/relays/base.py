@@ -278,9 +278,9 @@ class BaseRelayController(ABC):
         try:
             start_time = time.time()
             
-            # Attiva relè (sincrono)
+            # Attiva relè (sincrono diretto come nel legacy)
             target_state = not self.active_low  # ON
-            success = asyncio.run(self._hardware_set_state(target_state))
+            success = self._sync_hardware_set_state(target_state)
             
             if not success:
                 raise Exception("Fallimento attivazione hardware")
@@ -306,7 +306,7 @@ class BaseRelayController(ABC):
             with self._thread_lock:
                 if not self._stop_thread:
                     target_state = self.active_low  # OFF
-                    success = asyncio.run(self._hardware_set_state(target_state))
+                    success = self._sync_hardware_set_state(target_state)
                     
                     if not success:
                         raise Exception("Fallimento disattivazione hardware")
@@ -324,7 +324,7 @@ class BaseRelayController(ABC):
             with self._thread_lock:
                 # Spegni in caso di errore
                 try:
-                    asyncio.run(self._hardware_set_state(self.active_low))
+                    self._sync_hardware_set_state(self.active_low)
                 except:
                     pass
                 
@@ -335,6 +335,20 @@ class BaseRelayController(ABC):
                     self.on_error(e)
                 
                 print(f"❌ {self.relay_id} errore durante attivazione thread: {e}")
+    
+    @abstractmethod
+    def _sync_hardware_set_state(self, state: bool) -> bool:
+        """
+        Versione sincrona per threading di _hardware_set_state.
+        Da implementare nelle sottoclassi per compatibilità legacy.
+        
+        Args:
+            state: True per ON, False per OFF
+            
+        Returns:
+            bool: True se operazione riuscita
+        """
+        pass
     
     async def _timed_activation(self, duration: float, trigger_source: str) -> None:
         """Gestisce attivazione temporizzata"""
@@ -471,6 +485,32 @@ class BaseRelayController(ABC):
     def is_active(self) -> bool:
         """Verifica se relè è attualmente attivo"""
         return self.state == RelayState.ON
+    
+    async def close(self) -> None:
+        """
+        Chiude relè e libera risorse.
+        Metodo richiesto per compatibilità con shutdown del sistema.
+        """
+        try:
+            # Ferma thread attivo
+            with self._thread_lock:
+                self._stop_thread = True
+            
+            # Aspetta che il thread finisca (con timeout)
+            if self._activation_thread and self._activation_thread.is_alive():
+                self._activation_thread.join(timeout=1.0)
+            
+            # Spegni hardware
+            await self._hardware_set_state(self.active_low)  # OFF
+            
+            # Cleanup hardware
+            await self._hardware_cleanup()
+            
+            self.set_state(RelayState.OFF, trigger_source="system_shutdown")
+            print(f"🔌 {self.relay_id}: Chiuso")
+            
+        except Exception as e:
+            print(f"❌ Errore chiusura {self.relay_id}: {e}")
     
     def reset_stats(self) -> None:
         """Reset statistiche"""

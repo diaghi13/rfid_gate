@@ -184,6 +184,36 @@ class GPIORelayController(BaseRelayController):
             print(f"❌ Errore set state GPIO {self.relay_id}: {e}")
             return False
     
+    def _sync_hardware_set_state(self, state: bool) -> bool:
+        """
+        Versione sincrona di _hardware_set_state per threading.
+        Identica alla logica della versione async ma senza asyncio.
+        
+        Args:
+            state: True per ON (relè attivo), False per OFF (relè spento)
+            
+        Returns:
+            bool: True se operazione riuscita
+        """
+        if not self.is_setup or not HAS_HARDWARE:
+            return False
+        
+        try:
+            # LOGICA CORRETTA per active_low (IDENTICA AL LEGACY)
+            if self.active_low:
+                # Con active_low=True: ON=LOW, OFF=HIGH
+                gpio_state = GPIO.LOW if state else GPIO.HIGH
+            else:
+                # Con active_low=False: ON=HIGH, OFF=LOW  
+                gpio_state = GPIO.HIGH if state else GPIO.LOW
+                
+            GPIO.output(self.pin, gpio_state)
+            return True
+            
+        except Exception as e:
+            print(f"❌ Errore sync set state GPIO {self.relay_id}: {e}")
+            return False
+    
     async def _hardware_cleanup(self) -> None:
         """Cleanup hardware GPIO"""
         try:
