@@ -359,6 +359,14 @@ class BaseRelayController(ABC):
                     
                     self.set_state(RelayState.OFF, trigger_source=trigger_source)
                     print(f"✅ {self.relay_id}: OFF dopo {actual_duration:.2f}s (thread {thread_name})")
+                    
+                    # 🔍 VERIFICA FINALE: Controlla se il relay è veramente spento
+                    try:
+                        final_check = self._check_relay_physical_state()
+                        if final_check:
+                            print(f"🔍 {self.relay_id}: Verifica finale - Relay stato: {final_check}")
+                    except Exception as check_e:
+                        print(f"⚠️  {self.relay_id}: Impossibile verificare stato finale: {check_e}")
                 else:
                     print(f"🛑 {self.relay_id}: Disattivazione saltata - thread fermato")
             
@@ -383,6 +391,16 @@ class BaseRelayController(ABC):
         
         finally:
             print(f"🧵 THREAD END: {self.relay_id} worker terminato (ID: {thread_name})")
+    
+    def _check_relay_physical_state(self) -> str:
+        """
+        Verifica lo stato fisico del relay per diagnostic.
+        Da sovrascrivere nelle sottoclassi.
+        
+        Returns:
+            str: Descrizione dello stato del relay
+        """
+        return "Verifica stato non implementata per questo tipo di relay"
     
     @abstractmethod
     def _sync_hardware_set_state(self, state: bool) -> bool:

@@ -26,6 +26,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 from rfid_gate import AccessControlSystem, RFIDGateConfig
 from rfid_gate.config.settings import Config  # Compatibilità
 
+# 🚀 APPLICA PATCH INDEPENDENT RELAY
+print("🔧 Applicazione patch Independent Relay...")
+try:
+    from patch_independent_relay import apply_independent_relay_patch
+    if apply_independent_relay_patch():
+        print("✅ Independent Relay Patch attivo - Thread completamente indipendenti")
+    else:
+        print("⚠️  Independent Relay Patch fallito - Usando sistema standard")
+except Exception as e:
+    print(f"⚠️  Errore caricamento patch relay: {e}")
+    print("🔄 Continuando con sistema relay standard...")
+
 
 class RFIDGateApplication:
     """

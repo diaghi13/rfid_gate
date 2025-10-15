@@ -212,7 +212,18 @@ class GPIORelayController(BaseRelayController):
                 
             print(f"🔧 {self.relay_id}: GPIO.output(pin={self.pin}, state={'HIGH' if gpio_state else 'LOW'}) - {logic_explanation}")
             GPIO.output(self.pin, gpio_state)
-            print(f"✅ {self.relay_id}: GPIO command completed successfully")
+            
+            # 🔍 VERIFICA STATO EFFETTIVO DEL PIN
+            actual_state = GPIO.input(self.pin)
+            expected_state_name = 'HIGH' if gpio_state else 'LOW'
+            actual_state_name = 'HIGH' if actual_state else 'LOW'
+            
+            if actual_state == gpio_state:
+                print(f"✅ {self.relay_id}: GPIO command completed successfully - Pin reads {actual_state_name}")
+            else:
+                print(f"⚠️  {self.relay_id}: GPIO MISMATCH! Expected {expected_state_name}, but pin reads {actual_state_name}")
+                print(f"🔧 Hardware diagnostic: Pin {self.pin} non risponde correttamente ai comandi GPIO")
+            
             return True
             
         except Exception as e:
@@ -295,6 +306,31 @@ class GPIORelayController(BaseRelayController):
     async def close(self):
         """Chiude il relè e resetta lo stato (alias per cleanup)"""
         await self.cleanup()
+    
+    def _check_relay_physical_state(self) -> str:
+        """
+        Verifica lo stato fisico del GPIO pin per diagnostic.
+        
+        Returns:
+            str: Descrizione dello stato del pin GPIO
+        """
+        if not self.is_setup or not HAS_HARDWARE:
+            return "GPIO non disponibile"
+        
+        try:
+            pin_state = GPIO.input(self.pin)
+            pin_state_name = "HIGH" if pin_state else "LOW"
+            
+            # Determina stato logico del relay
+            if self.active_low:
+                relay_logical_state = "OFF" if pin_state else "ON"
+            else:
+                relay_logical_state = "ON" if pin_state else "OFF"
+            
+            return f"Pin {self.pin}: {pin_state_name} → Relay: {relay_logical_state} (active_low={self.active_low})"
+        
+        except Exception as e:
+            return f"Errore lettura pin: {e}"
     
     async def cleanup(self):
         """Cleanup del relè GPIO"""
