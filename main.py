@@ -63,7 +63,9 @@ class RFIDGateApplication:
         self.shutdown_event.set()
         
         if self.system:
-            await self.system.shutdown()
+            # Ferma il sistema (questo fermerà i loop di lettura)
+            self.system.is_running = False
+            await self.system.stop()
     
     async def run(self):
         """
@@ -88,17 +90,11 @@ class RFIDGateApplication:
             self.system.on_access_event = self._on_access_event
             self.system.on_mode_change = self._on_mode_change
             
-            # Inizializza sistema
-            if not await self.system.initialize():
-                print("❌ Inizializzazione fallita")
-                return False
-            
+            # Inizializza e avvia sistema (questo include il loop di lettura)
             self.is_running = True
+            success = await self.system.run()
             
-            # Loop principale - attendi shutdown
-            await self.shutdown_event.wait()
-            
-            return True
+            return success
             
         except KeyboardInterrupt:
             print("\\n🛑 Interruzione da tastiera")
@@ -111,7 +107,7 @@ class RFIDGateApplication:
             return False
         finally:
             if self.system:
-                await self.system.shutdown()
+                await self.system.stop()
     
     def _print_configuration(self):
         """Stampa configurazione sistema (compatibilità)"""
