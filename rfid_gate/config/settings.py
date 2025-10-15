@@ -99,6 +99,14 @@ class MQTTConfig:
     auth_response_topic: str = "rfid_gate/auth_response"
     manual_open_topic: str = "rfid_gate/manual_open"
     
+    # ✨ Configurazioni per flusso parallelo e logging
+    parallel_auth: bool = True              # MQTT parallelo, non-bloccante
+    sync_logs_only_on_mqtt_failure: bool = True    # Sync logs al server solo se MQTT fallisce  
+    always_log_locally: bool = True         # Log locali sempre salvati (per download/backup)
+    enable_retry_queue: bool = True         # Queue retry per connessioni perse
+    max_retry_queue_size: int = 1000        # Dimensione max queue retry
+    retry_interval: int = 30                # Intervallo retry in secondi
+    
     @classmethod
     def from_env(cls) -> 'MQTTConfig':
         """Crea configurazione da variabili ambiente"""
@@ -111,7 +119,14 @@ class MQTTConfig:
             keep_alive=int(os.getenv('MQTT_KEEP_ALIVE', cls.keep_alive)),
             card_read_topic=os.getenv('MQTT_CARD_READ_TOPIC', cls.card_read_topic),
             auth_response_topic=os.getenv('MQTT_AUTH_RESPONSE_TOPIC', cls.auth_response_topic),
-            manual_open_topic=os.getenv('MQTT_MANUAL_OPEN_TOPIC', cls.manual_open_topic)
+            manual_open_topic=os.getenv('MQTT_MANUAL_OPEN_TOPIC', cls.manual_open_topic),
+            # ✨ Configurazioni parallelo e logging
+            parallel_auth=os.getenv('MQTT_PARALLEL_AUTH', 'True').lower() == 'true',
+            sync_logs_only_on_mqtt_failure=os.getenv('MQTT_SYNC_LOGS_ONLY_ON_FAILURE', 'True').lower() == 'true',
+            always_log_locally=os.getenv('MQTT_ALWAYS_LOG_LOCALLY', 'True').lower() == 'true',
+            enable_retry_queue=os.getenv('MQTT_ENABLE_RETRY_QUEUE', 'True').lower() == 'true',
+            max_retry_queue_size=int(os.getenv('MQTT_MAX_RETRY_QUEUE_SIZE', cls.max_retry_queue_size)),
+            retry_interval=int(os.getenv('MQTT_RETRY_INTERVAL', cls.retry_interval))
         )
 
 
@@ -140,8 +155,8 @@ class RelayConfig:
     enabled: bool = True
     pin: int = 18
     active_time: int = 2
-    active_low: bool = False
-    initial_state: str = "LOW"
+    active_low: bool = True   # Default legacy: relè attivo LOW
+    initial_state: str = "HIGH"  # Default legacy: parte HIGH (relè spento)
 
 
 @dataclass
@@ -196,27 +211,32 @@ class OfflineConfig:
 
 @dataclass
 class SyncConfig:
-    """Configurazione sistema di sincronizzazione"""
+    """Configurazione per la sincronizzazione"""
     enabled: bool = True
     server_url: str = "http://localhost:3000"
     sync_endpoint: str = "/api/sync"
     logs_endpoint: str = "/api/logs/bulk"
     health_endpoint: str = "/api/health"
     updates_endpoint: str = "/api/cards/updates"
-    
-    # Timing
     daily_sync_time: str = "06:00"
-    updates_check_interval: int = 15  # minuti
-    logs_sync_interval: int = 5  # minuti
-    connection_timeout: int = 30  # secondi
-    
-    # Database
+    updates_check_interval: int = 15
+    logs_sync_interval: int = 5
+    connection_timeout: int = 30
     cache_db_path: str = "cache/local_cache.db"
     max_pending_logs: int = 1000
-    
-    # Retry logic
     max_retries: int = 3
-    retry_delay: int = 5  # secondi
+    retry_delay: int = 5
+    
+    # 🔥 NUOVI: Endpoint REST per validazione real-time (fallback quando carta non in cache)
+    fallback_server_url: str = "http://localhost:8000"  # Server per fallback
+    fallback_endpoint: str = "/api/gate-verification"    # Endpoint specifico
+    fallback_timeout: int = 3  # timeout in secondi per fallback real-time
+    gate_id: str = "tornello_01"  # ID del tornello per identificazione
+    
+    # Legacy compatibility
+    base_url: str = "http://localhost:8000"
+    update_interval: int = 900  # 15 minuti
+    daily_sync_hour: int = 6
 
 
 @dataclass
@@ -358,10 +378,14 @@ class RFIDGateConfig:
             logs_endpoint=os.getenv('SYNC_LOGS_ENDPOINT', '/api/logs/bulk'),
             health_endpoint=os.getenv('SYNC_HEALTH_ENDPOINT', '/api/health'),
             updates_endpoint=os.getenv('SYNC_UPDATES_ENDPOINT', '/api/cards/updates'),
+            fallback_server_url=os.getenv('SYNC_FALLBACK_SERVER_URL', 'http://localhost:8000'),  # 🔥 NUOVO
+            fallback_endpoint=os.getenv('SYNC_FALLBACK_ENDPOINT', '/api/gate-verification'),      # 🔥 NUOVO
             daily_sync_time=os.getenv('SYNC_DAILY_TIME', '06:00'),
             updates_check_interval=int(os.getenv('SYNC_UPDATES_INTERVAL', 15)),
             logs_sync_interval=int(os.getenv('SYNC_LOGS_INTERVAL', 5)),
             connection_timeout=int(os.getenv('SYNC_CONNECTION_TIMEOUT', 30)),
+            fallback_timeout=int(os.getenv('SYNC_FALLBACK_TIMEOUT', 3)),  # 🔥 NUOVO
+            gate_id=os.getenv('SYNC_GATE_ID', 'tornello_01'),  # 🔥 NUOVO
             cache_db_path=os.getenv('SYNC_CACHE_DB_PATH', 'cache/local_cache.db'),
             max_pending_logs=int(os.getenv('SYNC_MAX_PENDING_LOGS', 1000)),
             max_retries=int(os.getenv('SYNC_MAX_RETRIES', 3)),

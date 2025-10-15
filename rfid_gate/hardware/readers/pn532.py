@@ -48,6 +48,10 @@ class PN532Reader(BaseRFIDReader):
         self.uart_port = kwargs.get('uart_port', '/dev/serial0')
         self.uart_baudrate = kwargs.get('uart_baudrate', 115200)
         
+        # Pin GPIO aggiuntivi (per compatibilità legacy)
+        self.rst_pin = kwargs.get('rst_pin', None)
+        self.sda_pin = kwargs.get('sda_pin', None)  # Usato come CS pin per SPI
+        
         print(f"📡 PN532Reader {reader_id} creato - Interface: {self.interface.upper()}")
     
     def get_reader_type(self) -> str:
@@ -77,22 +81,29 @@ class PN532Reader(BaseRFIDReader):
             if not success:
                 return False
             
+            # Test hardware rigoroso (come sistema legacy)
+            hardware_test_ok = await self._hardware_connection_test()
+            if not hardware_test_ok:
+                print(f"❌ PN532 {self.reader_id} - Test hardware fallito")
+                return False
+            
             # ❌ SKIP SAM configuration - causa blocchi!
             # ❌ SKIP set_passive_activation_retries - non esiste sempre
             
-            # Test semplice firmware (senza blocking calls)
+            # Test firmware con validazione rigorosa
             try:
                 fw_info = await self._safe_firmware_check()
                 if fw_info:
                     print(f"✅ PN532 {self.reader_id} - Firmware OK: {fw_info}")
+                    self.consecutive_errors = 0
+                    print(f"✅ PN532 {self.reader_id} inizializzato (test hardware superato)")
+                    return True
                 else:
-                    print(f"⚠️ PN532 {self.reader_id} - Firmware check limitato (continuiamo)")
+                    print(f"❌ PN532 {self.reader_id} - Firmware non raggiungibile")
+                    return False
             except Exception as e:
-                print(f"⚠️ Firmware check fallito: {e} (continuiamo...)")
-            
-            self.consecutive_errors = 0
-            print(f"✅ PN532 {self.reader_id} inizializzato (design robusto)")
-            return True
+                print(f"❌ PN532 {self.reader_id} - Firmware check fallito: {e}")
+                return False
             
         except Exception as e:
             print(f"❌ Errore inizializzazione PN532 {self.reader_id}: {e}")
@@ -145,7 +156,7 @@ class PN532Reader(BaseRFIDReader):
             return False
     
     async def _setup_spi_robust(self) -> bool:
-        """Inizializzazione SPI robusta."""
+        """Inizializzazione SPI robusta con CS pin corretto."""
         try:
             try:
                 import board
@@ -157,16 +168,28 @@ class PN532Reader(BaseRFIDReader):
                 
                 def _create_spi():
                     # Crea bus SPI
-                    spi = busio.SPI(board.SCLK, board.MOSI, board.MISO)
+                    spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
                     
-                    # CS pin (default CE0 per bus 0)
-                    cs_pin = digitalio.DigitalInOut(board.CE0 if self.spi_bus == 0 else board.CE1)
+                    # CS pin - usa pin specifico se configurato, altrimenti D8 (come legacy)
+                    if self.sda_pin is not None:
+                        # sda_pin viene usato come CS pin per PN532 SPI nel legacy
+                        # Pin 7 = GPIO4, Pin 8 = GPIO14, ecc.
+                        if self.sda_pin == 7:
+                            cs_pin = digitalio.DigitalInOut(board.D4)
+                        elif self.sda_pin == 8:
+                            cs_pin = digitalio.DigitalInOut(board.D14) 
+                        else:
+                            # Fallback a D8 standard
+                            cs_pin = digitalio.DigitalInOut(board.D8)
+                    else:
+                        # Default D8 come nel sistema legacy
+                        cs_pin = digitalio.DigitalInOut(board.D8)
                     
                     return PN532_SPI(spi, cs_pin, debug=False)
                 
                 self.pn532 = await loop.run_in_executor(None, _create_spi)
                 
-                print(f"   ✅ SPI PN532 creato - Bus: {self.spi_bus}, Device: {self.spi_device}")
+                print(f"   ✅ SPI PN532 creato - Bus: {self.spi_bus}, Device: {self.spi_device}, CS: {self.sda_pin or 'D8'}")
                 return True
                 
             except ImportError:
@@ -220,6 +243,64 @@ class PN532Reader(BaseRFIDReader):
             print(f"   ❌ Errore setup UART: {e}")
             return False
     
+    async def _hardware_connection_test(self) -> bool:
+        """
+        Test rigoroso della connessione hardware PN532.
+        Simula il test_connection() del sistema legacy.
+        
+        Returns:
+            bool: True se hardware effettivamente connesso e funzionante
+        """
+        if not self.pn532:
+            return False
+        
+        try:
+            loop = asyncio.get_event_loop()
+            
+            def _test_hardware():
+                """Test hardware sincrono"""
+                try:
+                    # Test 1: Verifica firmware_version (se dispositivo risponde)
+                    fw = self.pn532.firmware_version
+                    if not fw:
+                        return False
+                    
+                    # Test 2: Prova una lettura rapida per verificare la comunicazione
+                    # Questo fallisce se i pin sono sbagliati o hardware non connesso
+                    try:
+                        # Timeout molto breve per test rapido
+                        result = self.pn532.read_passive_target(timeout=0.05)
+                        # Non importa il risultato, importa che non dia eccezione
+                        return True
+                    except Exception:
+                        # Se firmware_version funziona ma read_passive no,
+                        # potrebbe essere problema pin/connessioni
+                        return fw is not None
+                        
+                except Exception as e:
+                    print(f"   ⚠️ Hardware test details: {e}")
+                    return False
+            
+            # Esegui test con timeout per evitare blocchi
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, _test_hardware),
+                timeout=2.0
+            )
+            
+            if result:
+                print(f"   ✅ PN532 {self.reader_id} - Hardware test superato")
+            else:
+                print(f"   ❌ PN532 {self.reader_id} - Hardware non risponde correttamente")
+            
+            return result
+            
+        except asyncio.TimeoutError:
+            print(f"   ❌ PN532 {self.reader_id} - Hardware test timeout")
+            return False
+        except Exception as e:
+            print(f"   ❌ PN532 {self.reader_id} - Hardware test errore: {e}")
+            return False
+
     async def _safe_firmware_check(self) -> Optional[str]:
         """Test firmware senza bloccare."""
         if not self.pn532:

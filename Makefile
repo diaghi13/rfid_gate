@@ -6,7 +6,10 @@
 # Configurazione
 PYTHON = python3
 TEST_DIR = tests
+INTEGRATION_TEST_DIR = tests/integration
 SRC_DIR = rfid_gate
+DEPLOY_DIR = deploy
+DOCS_DIR = docs
 COVERAGE_DIR = coverage_html
 
 # Colori per output
@@ -22,6 +25,23 @@ NC = \033[0m # No Color
 test:
 	@echo "$(BLUE)🧪 Running all tests...$(NC)"
 	@$(PYTHON) $(TEST_DIR)/test_runner.py
+
+# Test integrazione
+test-integration:
+	@echo "$(BLUE)🔗 Running integration tests...$(NC)"
+	@$(PYTHON) $(INTEGRATION_TEST_DIR)/test_integration_fallback.py
+	@$(PYTHON) $(INTEGRATION_TEST_DIR)/test_complete_system.py
+
+# Test fallback REST
+test-fallback:
+	@echo "$(BLUE)🔥 Testing REST fallback system...$(NC)"
+	@$(PYTHON) $(INTEGRATION_TEST_DIR)/test_gymme_rest_endpoint.py
+	@$(PYTHON) $(INTEGRATION_TEST_DIR)/test_integration_fallback.py
+
+# Test sistema completo
+test-system:
+	@echo "$(BLUE)🔄 Testing complete system...$(NC)"
+	@$(PYTHON) $(INTEGRATION_TEST_DIR)/test_complete_system.py
 
 ## WebUI Commands
 
@@ -260,11 +280,45 @@ help:
 	@echo "  benchmark        - Performance benchmarks"
 	@echo "  stress-test      - Stress testing"
 	@echo ""
+	@echo "$(YELLOW)🚀 Deploy Commands:$(NC)"
+	@echo "  deploy-pi        - Deploy to Raspberry Pi"
+	@echo "  start-pi         - Start Raspberry Pi service"
+	@echo ""
+	@echo "$(YELLOW)📚 Documentation:$(NC)"
+	@echo "  docs-serve       - Serve documentation locally"
+	@echo "  docs-build       - Build documentation"
+	@echo ""
 	@echo "$(BLUE)Examples:$(NC)"
 	@echo "  make test                    # Run all tests"
-	@echo "  make test-unit -j4          # Run unit tests in parallel"
+	@echo "  make test-fallback          # Test REST fallback system"
 	@echo "  make test-coverage          # Generate coverage report"
-	@echo "  make ci-test                # Simulate CI pipeline"
+	@echo "  make deploy-pi              # Deploy to Raspberry Pi"
+
+## Deploy Commands
+
+# Deploy to Raspberry Pi
+deploy-pi:
+	@echo "$(BLUE)🍓 Deploying to Raspberry Pi...$(NC)"
+	@bash $(DEPLOY_DIR)/deploy_raspberry_pi.sh
+
+# Start Raspberry Pi service
+start-pi:
+	@echo "$(BLUE)🚀 Starting Raspberry Pi service...$(NC)"
+	@bash $(DEPLOY_DIR)/start_raspberry.sh
+
+## Documentation Commands
+
+# Serve documentation locally (if using mkdocs or similar)
+docs-serve:
+	@echo "$(BLUE)📚 Serving documentation...$(NC)"
+	@echo "📁 Documentation available in: $(DOCS_DIR)/"
+	@ls -la $(DOCS_DIR)/
+
+# Build/check documentation
+docs-build:
+	@echo "$(BLUE)🔨 Building documentation...$(NC)"
+	@echo "✅ Documentation structure:"
+	@find $(DOCS_DIR) -name "*.md" | sort
 
 # Default target
 .DEFAULT_GOAL := help

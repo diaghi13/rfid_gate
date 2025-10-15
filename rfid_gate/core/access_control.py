@@ -455,7 +455,7 @@ class AccessControlSystem:
             print(f"❌ Errore invio dati MQTT: {e}")
     
     async def _authenticate_card(self, card_event: CardEvent) -> AccessDecision:
-        """Autentica carta usando strategia offline-first con controllo bidirezionale"""
+        """Autentica carta usando strategia offline-first con MQTT parallelo"""
         try:
             # 🔄 CONTROLLO BIDIREZIONALE (se abilitato)
             if self.config.system.bidirectional_mode and self.sync_manager:
@@ -478,7 +478,28 @@ class AccessControlSystem:
                     )
                     return AccessDecision.DENY
             
-            # 1. Prova prima con SyncManager (cache locale)
+            # 🚀 NUOVO FLUSSO PARALLELO NON-BLOCCANTE
+            mqtt_success = False
+            
+            # 1. Invia SEMPRE richiesta MQTT in parallelo (se online e MQTT abilitato)
+            if (self.mode == SystemMode.ONLINE and self.config.auth.enabled and 
+                self.mqtt_client and self.mqtt_client.is_connected() and
+                getattr(self.config.mqtt, 'parallel_auth', True)):
+                
+                # Crea auth request
+                auth_request = AuthRequest.from_card_event(
+                    card_event=card_event,
+                    tornello_id=self.config.system.tornello_id,
+                    auth_required=self.config.auth.enabled
+                )
+                
+                # Invia in modalità parallela (non-bloccante)
+                mqtt_success = await self.mqtt_client.send_auth_request_parallel(auth_request)
+                print(f"📡 MQTT parallelo {'✅ inviato' if mqtt_success else '⚠️ accodato/retry'}: {card_event.uid_formatted}")
+            
+            # 2. Procedi IMMEDIATAMENTE con autenticazione locale (priorità offline-first)
+            
+            # A. Prova prima con SyncManager (cache locale)
             if self.sync_manager and self.config.sync.enabled:
                 sync_result = await self.sync_manager.validate_card_offline(
                     card_event.uid_formatted, 
@@ -486,7 +507,7 @@ class AccessControlSystem:
                 )
                 
                 if sync_result['authorized']:
-                    # ✅ ACCESSO AUTORIZZATO - Aggiorna stato direzione
+                    # ✅ ACCESSO AUTORIZZATO LOCALMENTE
                     if self.config.system.bidirectional_mode:
                         await self.sync_manager.update_user_direction(
                             card_uid=card_event.uid_formatted,
@@ -495,108 +516,98 @@ class AccessControlSystem:
                             customer_id=sync_result.get('customer_id')
                         )
                     
-                    # Log accesso per sync futuro
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result="authorized",
-                        reason=sync_result['reason'],
-                        customer_id=sync_result.get('customer_id'),  # ✨ NUOVO: ID cliente
-                        customer_name=sync_result.get('customer_name'),
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
+                    # � LOGGING SEPARATO: Due flussi distinti
+                    
+                    # 1. Log LOCALE sempre salvato (per download/backup)
+                    if getattr(self.config.mqtt, 'always_log_locally', True):
+                        await self.sync_manager.log_access(
+                            card_uid=card_event.uid_formatted,
+                            direction=card_event.direction,
+                            result="authorized",
+                            reason=f"{sync_result['reason']} | Local",
+                            customer_id=sync_result.get('customer_id'),
+                            customer_name=sync_result.get('customer_name'),
+                            reader_type=card_event.reader_type,
+                            metadata=card_event.metadata
+                        )
+                    
+                    # 2. Log SYNC al server solo se MQTT fallisce
+                    should_sync_to_server = (
+                        not getattr(self.config.mqtt, 'sync_logs_only_on_mqtt_failure', True) or  
+                        not mqtt_success
                     )
+                    
+                    if should_sync_to_server:
+                        # Forza sync di questo log specifico
+                        await self.sync_manager._sync_logs()
+                        print(f"📤 Log sync forzato al server per: {card_event.uid_formatted}")
+                    else:
+                        print(f"� Log sync saltato - MQTT OK per: {card_event.uid_formatted}")
+                    
                     return AccessDecision.GRANT
                 
-                # Se non autorizzata dalla cache ma il SyncManager è offline, 
-                # prova MQTT come fallback
-                if not self.sync_manager.is_online and self.mode == SystemMode.ONLINE:
-                    pass  # Continua con MQTT
+                # Se non autorizzata dalla cache
                 else:
-                    # Log accesso negato
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result="denied",
-                        reason=sync_result['reason'],
-                        customer_id=sync_result.get('customer_id'),  # ✨ NUOVO: ID cliente
-                        customer_name=sync_result.get('customer_name'),
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
+                    # � LOGGING SEPARATO per accesso negato
+                    
+                    # 1. Log LOCALE sempre salvato
+                    if getattr(self.config.mqtt, 'always_log_locally', True):
+                        await self.sync_manager.log_access(
+                            card_uid=card_event.uid_formatted,
+                            direction=card_event.direction,
+                            result="denied",
+                            reason=f"{sync_result['reason']} | Local",
+                            customer_id=sync_result.get('customer_id'),
+                            customer_name=sync_result.get('customer_name'),
+                            reader_type=card_event.reader_type,
+                            metadata=card_event.metadata
+                        )
+                    
+                    # 2. Sync al server solo se MQTT fallisce
+                    should_sync_to_server = (
+                        not getattr(self.config.mqtt, 'sync_logs_only_on_mqtt_failure', True) or  
+                        not mqtt_success
                     )
+                    
+                    if should_sync_to_server:
+                        await self.sync_manager._sync_logs()
+                        print(f"📤 Log sync forzato al server per: {card_event.uid_formatted}")
+                    
                     return AccessDecision.DENY
             
-            # 2. Fallback MQTT se online e abilitato
-            if self.mode == SystemMode.ONLINE and self.config.auth.enabled:
-                decision = await self._online_authentication(card_event)
-                
-                # ✅ Se accesso autorizzato, aggiorna stato direzione
-                if decision == AccessDecision.GRANT and self.config.system.bidirectional_mode and self.sync_manager:
-                    await self.sync_manager.update_user_direction(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        tornello_id=self.config.system.tornello_id,
-                        customer_id=None  # MQTT non ha customer_id
-                    )
-                
-                # Log anche nel sync manager se disponibile
-                if self.sync_manager:
-                    result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result=result_str,
-                        reason=f"MQTT auth: {decision.value}",
-                        customer_id=None,  # ✨ MQTT non ha customer_id
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
-                    )
-                
-                return decision
-            
-            # 3. Modalità offline legacy
+            # B. Fallback offline mode (se non c'è SyncManager o se legacy)
             elif self.mode == SystemMode.OFFLINE:
                 decision = self._offline_authentication(card_event.uid_formatted)
                 
-                # ✅ Se accesso autorizzato, aggiorna stato direzione
-                if decision == AccessDecision.GRANT and self.config.system.bidirectional_mode and self.sync_manager:
-                    await self.sync_manager.update_user_direction(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        tornello_id=self.config.system.tornello_id,
-                        customer_id=None  # Legacy offline non ha customer_id
-                    )
-                
+                # 📝 LOGGING SEPARATO in modalità offline
                 if self.sync_manager:
                     result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result=result_str,
-                        reason=f"Offline legacy: {decision.value}",
-                        customer_id=None,  # ✨ Legacy offline non ha customer_id
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
-                    )
+                    
+                    # 1. Log LOCALE sempre salvato
+                    if getattr(self.config.mqtt, 'always_log_locally', True):
+                        await self.sync_manager.log_access(
+                            card_uid=card_event.uid_formatted,
+                            direction=card_event.direction,
+                            result=result_str,
+                            reason=f"Offline auth | Local",
+                            customer_id=None,
+                            reader_type=card_event.reader_type,
+                            metadata=card_event.metadata
+                        )
+                    
+                    # 2. Sync sempre necessario in modalità offline (MQTT non disponibile)
+                    # SyncManager gestirà automaticamente il retry quando torna online
+                    print(f"📦 Log accodato per sync futuro: {card_event.uid_formatted}")
                 
                 return decision
             
+            # C. Nessuna autenticazione disponibile
             else:
-                # Auth disabilitata - accesso sempre consentito
-                if self.sync_manager:
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result="authorized",
-                        reason="Autenticazione disabilitata",
-                        customer_id=None,  # ✨ Auth disabilitata non ha customer_id
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
-                    )
-                return AccessDecision.GRANT
+                return AccessDecision.DENY
                 
         except Exception as e:
             print(f"❌ Errore autenticazione: {e}")
+            return AccessDecision.ERROR
             return AccessDecision.ERROR
     
     def _offline_authentication(self, card_uid: str) -> AccessDecision:

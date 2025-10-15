@@ -92,7 +92,9 @@ class ReaderFactory:
                     'spi_bus': reader_config.pn532_spi_bus,
                     'spi_device': reader_config.pn532_spi_device,
                     'uart_port': reader_config.pn532_uart_port,
-                    'uart_baudrate': reader_config.pn532_uart_baudrate
+                    'uart_baudrate': reader_config.pn532_uart_baudrate,
+                    'rst_pin': reader_config.rst_pin,
+                    'sda_pin': reader_config.sda_pin
                 }
             else:
                 kwargs = {}

@@ -176,6 +176,7 @@ class AuthRequest:
     direzione: str                         # Direzione (legacy: direzione)
     timestamp: str                         # ISO timestamp (legacy: timestamp)
     auth_required: bool = True             # Flag auth (legacy: auth_required)
+    fallback_mode: bool = False            # 🔥 NUOVO: Flag per richieste di fallback real-time
     
     # ========================================
     # ✨ CAMPI FUTURI (COMMENTATI PER USO FUTURO)
@@ -262,6 +263,11 @@ class AsyncMQTTClient:
         self.message_queue: List[MQTTMessage] = []
         self.max_queue_size = 1000
         
+        # ✨ Queue retry per messaggi falliti
+        self.retry_queue: List[MQTTMessage] = []
+        self.max_retry_queue_size = getattr(config_mqtt, 'max_retry_queue_size', 1000)
+        self.retry_interval = getattr(config_mqtt, 'retry_interval', 30)
+        
         # Auth system
         self.auth_responses: Dict[str, Dict[str, Any]] = {}
         self.pending_auths: Dict[str, AuthRequest] = {}
@@ -276,6 +282,7 @@ class AsyncMQTTClient:
         # Tasks
         self._reconnect_task: Optional[asyncio.Task] = None
         self._queue_processor_task: Optional[asyncio.Task] = None
+        self._retry_processor_task: Optional[asyncio.Task] = None  # ✨ Nuovo task retry
         
         # Statistics
         self.stats = {
@@ -392,6 +399,11 @@ class AsyncMQTTClient:
             client.subscribe(manual_topic)
             
             print(f"📧 Sottoscritto a: {auth_topic}, {manual_topic}")
+            
+            # ✨ Avvia retry processor se abilitato e non già attivo
+            if (getattr(self.config, 'enable_retry_queue', True) and 
+                (not self._retry_processor_task or self._retry_processor_task.done())):
+                self._retry_processor_task = asyncio.create_task(self._process_retry_queue())
             
             # Callback utente
             if self.on_connected:
@@ -514,6 +526,45 @@ class AsyncMQTTClient:
                 print(f"❌ Errore processore coda: {e}")
                 await asyncio.sleep(1)
     
+    async def _process_retry_queue(self):
+        """✨ Processore coda retry per messaggi falliti"""
+        while True:
+            try:
+                if (self.state == ConnectionState.CONNECTED and 
+                    self.retry_queue and self.client):
+                    
+                    print(f"🔄 Processing retry queue: {len(self.retry_queue)} messaggi")
+                    
+                    # Processa messaggi retry
+                    messages_to_retry = self.retry_queue[:5]  # Max 5 alla volta
+                    self.retry_queue = self.retry_queue[5:]
+                    
+                    for msg in messages_to_retry:
+                        try:
+                            payload_str = json.dumps(msg.payload)
+                            result = self.client.publish(msg.topic, payload_str, msg.qos, msg.retain)
+                            
+                            if result.rc == 0:
+                                print(f"✅ MQTT retry riuscito: {msg.topic}")
+                            else:
+                                print(f"❌ MQTT retry fallito: {result.rc}")
+                                # Rimetti in coda se c'è spazio
+                                if len(self.retry_queue) < self.max_retry_queue_size:
+                                    self.retry_queue.append(msg)
+                                    
+                        except Exception as e:
+                            print(f"❌ Errore retry messaggio: {e}")
+                            # Rimetti in coda se c'è spazio
+                            if len(self.retry_queue) < self.max_retry_queue_size:
+                                self.retry_queue.append(msg)
+                
+                # Attesa basata sull'intervallo configurato
+                await asyncio.sleep(self.retry_interval)
+                
+            except Exception as e:
+                print(f"❌ Errore processore retry: {e}")
+                await asyncio.sleep(self.retry_interval)
+    
     async def send_card_read(self, card_message: CardReadMessage) -> bool:
         """
         Invia messaggio lettura carta con payload LEGACY compatibile.
@@ -618,30 +669,52 @@ class AsyncMQTTClient:
         except Exception as e:
             print(f"❌ Errore send_auth_request: {e}")
             return None
+    
+    async def send_auth_request_parallel(self, auth_request: AuthRequest) -> bool:
+        """
+        ✨ Invia richiesta autenticazione in modalità parallela (fire-and-forget).
+        Non attende risposta, utile per notificare il server senza bloccare.
+        
+        Args:
+            auth_request: Richiesta autenticazione
             
-            # Crea topic
-            topic = f"gate/{auth_request.tornello_id}/auth_request"
+        Returns:
+            bool: True se inviato/accodato, False se errore
+        """
+        try:
+            # ========================================
+            # 🔄 PAYLOAD LEGACY COMPATIBILE
+            # ========================================
+            payload = {
+                "card_uid": auth_request.card_uid,
+                "identificativo_tornello": auth_request.identificativo_tornello,
+                "direzione": auth_request.direzione,
+                "timestamp": auth_request.timestamp,
+                "auth_required": auth_request.auth_required
+            }
             
-            # Crea payload
-            payload = asdict(auth_request)
+            # Topic dinamico
+            topic = f"gate/{auth_request.identificativo_tornello}/auth_request"
             
             # Crea messaggio MQTT
             mqtt_msg = MQTTMessage(
                 topic=topic,
                 payload=payload,
-                qos=1  # QoS 1 per auth
+                qos=1  # QoS 1 per affidabilità
             )
             
             success = await self._send_message(mqtt_msg)
             
             if success:
-                return auth_request.request_id
+                print(f"🚀 Auth request parallelo inviato: {auth_request.card_uid}")
+                return True
             else:
-                # Rimuovi da pending se invio fallito
-                self.pending_auths.pop(auth_request.request_id, None)
-                return None
+                print(f"⚠️ Auth request parallelo accodato/retry: {auth_request.card_uid}")
+                return False  # In realtà potrebbe essere in retry queue
                 
         except Exception as e:
+            print(f"❌ Errore send_auth_request_parallel: {e}")
+            return False
             print(f"❌ Errore invio auth request: {e}")
             return None
     
@@ -691,10 +764,14 @@ class AsyncMQTTClient:
                     return True
                 else:
                     print(f"❌ MQTT invio fallito: {result.rc}")
+                    # ✨ Aggiungi alla retry queue se abilitata
+                    self._add_to_retry_queue(message)
                     return False
                     
             except Exception as e:
                 print(f"❌ Errore invio diretto: {e}")
+                # ✨ Aggiungi alla retry queue se abilitata
+                self._add_to_retry_queue(message)
                 return False
         else:
             # Accoda per invio successivo
@@ -705,7 +782,19 @@ class AsyncMQTTClient:
                 return True
             else:
                 print(f"❌ Coda MQTT piena ({self.max_queue_size})")
-                return False
+                # ✨ Prova retry queue come fallback
+                return self._add_to_retry_queue(message)
+    
+    def _add_to_retry_queue(self, message: MQTTMessage) -> bool:
+        """✨ Aggiunge messaggio alla retry queue"""
+        if (getattr(self.config, 'enable_retry_queue', True) and 
+            len(self.retry_queue) < self.max_retry_queue_size):
+            self.retry_queue.append(message)
+            print(f"♻️ MQTT aggiunto a retry queue: {message.topic} (retry: {len(self.retry_queue)})")
+            return True
+        else:
+            print(f"❌ Retry queue piena o disabilitata ({len(self.retry_queue)}/{self.max_retry_queue_size})")
+            return False
     
     def is_connected(self) -> bool:
         """Verifica se connesso"""
@@ -715,6 +804,10 @@ class AsyncMQTTClient:
         """Dimensione coda messaggi"""
         return len(self.message_queue)
     
+    def get_retry_queue_size(self) -> int:
+        """✨ Dimensione retry queue"""
+        return len(self.retry_queue)
+    
     def get_stats(self) -> Dict[str, Any]:
         """Statistiche client"""
         return {
@@ -722,6 +815,7 @@ class AsyncMQTTClient:
             'state': self.state.value,
             'connection_attempts': self.connection_attempts,
             'queue_size': len(self.message_queue),
+            'retry_queue_size': len(self.retry_queue),  # ✨ Nuovo
             'pending_auths': len(self.pending_auths)
         }
     
@@ -734,6 +828,10 @@ class AsyncMQTTClient:
             
             if self._queue_processor_task and not self._queue_processor_task.done():
                 self._queue_processor_task.cancel()
+            
+            # ✨ Cancella retry processor task
+            if self._retry_processor_task and not self._retry_processor_task.done():
+                self._retry_processor_task.cancel()
             
             # Disconnetti client
             if self.client:

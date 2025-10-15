@@ -1,4 +1,32 @@
-# 🔧 Tools & Scripts - RFID Gate System
+## �️ Tools e Utility
+
+Collezione di strumenti per gestione, manutenzione e diagnostica del sistema RFID Gate.
+
+### 🎛️ **Configurazione Sistema**
+
+#### `tools/gpio_config.py` - GPIO Configuration Helper 🆕
+
+**Configurazione interattiva pin GPIO per lettori RFID**
+
+```bash
+python3 tools/gpio_config.py
+```
+
+**Funzionalità:**
+
+- ✅ Configurazione con sistema legacy (testato e funzionante)
+- ⚙️ Setup MFRC522 e PN532 predefiniti
+- 🎨 Configurazione personalizzata con validazione
+- 📋 Pinout Raspberry Pi integrato
+- 💾 Backup automatico configurazioni
+- 🔄 Aggiornamento .env automatico
+
+**Configurazioni Predefinite:**
+
+- **Sistema Legacy** (Raccomandato): Pin testati e funzionanti
+- **MFRC522 Standard**: Configurazione standard per MFRC522
+- **PN532 Custom**: Setup personalizzato PN532
+- **Personalizzata**: Configurazione completamente custom🔧 Tools & Scripts - RFID Gate System
 
 Questa directory contiene strumenti organizzati e script per la gestione del sistema RFID Gate refactorizzato.
 

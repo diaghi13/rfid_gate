@@ -22,11 +22,12 @@ class TestGPIORelayController(unittest.TestCase):
             self.relay = GPIORelayController('test_relay', 18, active_time=2.0)
     
     def test_initialization(self):
-        """Test inizializzazione relè"""
+        """Test inizializzazione relè (Legacy System)"""
         self.assertEqual(self.relay.relay_id, 'test_relay')
         self.assertEqual(self.relay.pin, 18)
         self.assertEqual(self.relay.active_time, 2.0)
-        self.assertFalse(self.relay.active_low)
+        self.assertTrue(self.relay.active_low)  # Legacy: active_low=True
+        self.assertEqual(self.relay.initial_state, "HIGH")  # Legacy: initial_state=HIGH
     
     @patch('rfid_gate.hardware.relays.gpio.GPIO')
     def test_pulse_operation(self, mock_gpio):

@@ -59,10 +59,10 @@ class BaseRelayController(ABC):
         self.total_on_time = 0
         self.start_time = time.time()
         
-        # Configurazione default
+        # Configurazione default (Legacy System)
         self.active_time = 2.0  # Secondi
-        self.active_low = False  # True se relè attivo LOW
-        self.initial_state = "LOW"
+        self.active_low = True   # Legacy: relè attivo LOW (moduli con optoaccoppiatore)
+        self.initial_state = "HIGH"  # Legacy: parte HIGH (relè spento)
         
         # Callbacks
         self.on_state_change: Optional[Callable[[RelayEvent], None]] = None

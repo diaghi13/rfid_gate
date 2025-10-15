@@ -1,6 +1,67 @@
+# ⚙️ Esempi di Configurazione - RFID Gate
+
+Guida completa alla configurazione del sistema RFID Gate con esempi pratici per diversi scenari hardware.
+
+## 📌 **Configurazione GPIO (Sistema Legacy Testato)**
+
+Il sistema usa i pin GPIO del sistema legacy **funzionante e testato**:
+
+### **🔵 Lettore IN (PN532 I2C)**
+
+```bash
+RFID_IN_ENABLED=true
+RFID_IN_READER_TYPE=pn532
+RFID_IN_PN532_INTERFACE=i2c
+RFID_IN_PN532_I2C_ADDRESS=0x24
+
+# GPIO Configuration (Legacy System Values)
+RFID_IN_RST_PIN=22    # Pin Reset (GPIO 25)
+RFID_IN_SDA_PIN=8     # Pin SDA (GPIO 14)
+```
+
+### **🟡 Lettore OUT (PN532 SPI)**
+
+```bash
+RFID_OUT_ENABLED=true
+RFID_OUT_READER_TYPE=pn532
+RFID_OUT_PN532_INTERFACE=spi
+RFID_OUT_PN532_SPI_BUS=0
+
+# GPIO Configuration (Legacy System Values)
+RFID_OUT_RST_PIN=25   # Pin Reset (GPIO 6)
+RFID_OUT_SDA_PIN=7    # Pin CS/Chip Select (GPIO 4)
+```
+
+### **📍 Pin Mapping Raspberry Pi**
+
+| Pin Fisico | GPIO    | Funzione         | Lettore | Note      |
+| ---------- | ------- | ---------------- | ------- | --------- |
+| **Pin 7**  | GPIO 4  | CS (Chip Select) | OUT     | PN532 SPI |
+| **Pin 8**  | GPIO 14 | SDA              | IN      | PN532 I2C |
+| **Pin 22** | GPIO 25 | RST (Reset)      | IN      | PN532 I2C |
+| **Pin 25** | GPIO 6  | RST (Reset)      | OUT     | PN532 SPI |
+
+### **📄 Template .env.example Aggiornato** 🆕
+
+Il file `.env.example` è stato aggiornato con i valori del sistema legacy **funzionante**:
+
+```bash
+# Copia il template con configurazione GPIO legacy
+cp .env.example .env
+
+# Il file include già:
+RFID_IN_RST_PIN=22    # Sistema legacy testato
+RFID_IN_SDA_PIN=8     # Sistema legacy testato
+RFID_OUT_RST_PIN=25   # Sistema legacy testato
+RFID_OUT_SDA_PIN=7    # Sistema legacy testato
+```
+
+> **✅ Vantaggio**: Nuove installazioni avranno automaticamente la configurazione GPIO funzionante!
+
 # 🔧 Esempi di Configurazioni
 
 ## 📝 Configurazione 1: Solo Ingresso (Unidirezionale)
+
 ```bash
 # Sistema con un solo lettore RFID e un relè per l'ingresso
 BIDIRECTIONAL_MODE=False
@@ -27,6 +88,7 @@ RELAY_OUT_ENABLE=False
 ```
 
 ## 🔄 Configurazione 2: Sistema Bidirezionale Completo
+
 ```bash
 # Sistema con due lettori RFID e relè a due canali
 BIDIRECTIONAL_MODE=True
@@ -59,6 +121,7 @@ RELAY_OUT_ENABLE=True
 ```
 
 ## ↩️ Configurazione 3: Solo Uscita
+
 ```bash
 # Sistema con solo lettore e relè per l'uscita
 BIDIRECTIONAL_MODE=False
@@ -85,6 +148,7 @@ RELAY_OUT_ENABLE=True
 ```
 
 ## 🎛️ Configurazione 4: Due Lettori, Un Solo Relè
+
 ```bash
 # Due lettori RFID che controllano lo stesso relè
 BIDIRECTIONAL_MODE=True
@@ -113,6 +177,7 @@ RELAY_OUT_ENABLE=False
 ```
 
 ## 🔧 Configurazione 5: Relè Attivi LOW (per alcuni moduli)
+
 ```bash
 # Per relè che si attivano con segnale LOW
 BIDIRECTIONAL_MODE=True
@@ -144,18 +209,21 @@ RELAY_OUT_ENABLE=True
 ## 📋 Pin Mapping Raccomandati
 
 ### 🔌 RFID RC522
+
 ```
 Modulo IN:  RST=22, SDA=8  (SPI0)
 Modulo OUT: RST=25, SDA=7  (SPI1)
 ```
 
 ### ⚡ Relè
+
 ```
 Relè IN:  GPIO 18
 Relè OUT: GPIO 19
 ```
 
 ### 🔄 GPIO Liberi Disponibili
+
 ```
 GPIO disponibili: 2, 3, 4, 5, 6, 12, 13, 16, 17, 20, 21, 23, 24, 26, 27
 ```
@@ -175,7 +243,7 @@ sudo python3 main.py
 ## ⚠️ Note Importanti
 
 1. **Pin SDA/SS**: Ogni lettore RFID deve avere un pin SDA diverso
-2. **Pin Relè**: Ogni relè deve avere un GPIO diverso  
+2. **Pin Relè**: Ogni relè deve avere un GPIO diverso
 3. **Alimentazione**: Ogni modulo RFID ha bisogno di 3.3V
 4. **GND Comune**: Tutti i dispositivi condividono lo stesso GND
 5. **SPI**: Deve essere abilitato con `sudo raspi-config`

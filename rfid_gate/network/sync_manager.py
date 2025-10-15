@@ -441,9 +441,31 @@ class SyncManager:
             result = cursor.fetchone()
             
             if not result:
+                # 🚨 CARTA NON TROVATA - Prova fallback real-time se online
+                realtime_result = None
+                if self.is_online:
+                    self.logger.info(f"🔍 Carta {card_uid} non in cache, provo fallback real-time...")
+                    realtime_result = await self._check_realtime_fallback(card_uid, direction)
+                    
+                if realtime_result:
+                    # ✅ Carta trovata via REST real-time! Cache immediatamente
+                    self._cache_new_card_immediately(realtime_result)
+                    self.logger.info(f"🆕 Carta {card_uid} aggiunta via REST real-time")
+                    
+                    # Ritorna risultato positivo usando i dati dal server
+                    return {
+                        'authorized': True,
+                        'customer_id': realtime_result.get('customer_id'),
+                        'customer_name': realtime_result.get('customer_name'),
+                        'reason': 'Carta autorizzata via fallback REST real-time',
+                        'subscription_info': realtime_result.get('subscription_info', {}),
+                        'offline_mode': False  # REST real-time, non offline
+                    }
+                
+                # Fallback finale: carta non trovata
                 return {
                     'authorized': False,
-                    'customer_id': None,         # ✨ NUOVO: ID cliente
+                    'customer_id': None,
                     'customer_name': None,
                     'reason': 'Carta non trovata nella cache locale',
                     'subscription_info': None,
@@ -1073,6 +1095,120 @@ class SyncManager:
             except Exception as e:
                 self.logger.error(f"Errore background worker: {e}")
                 await asyncio.sleep(60)
+    
+    async def _check_realtime_fallback(self, card_uid: str, direction: str = "in") -> Optional[Dict[str, Any]]:
+        """
+        🔥 Fallback REST real-time per carte non in cache.
+        Effettua una richiesta HTTP POST diretta per validare una carta specifica.
+        
+        Endpoint: POST {fallback_server_url}{fallback_endpoint}
+        Payload: {"uid": "632D3903", "direction": "out", "gate_id": "tornello_01"}
+        """
+        try:
+            # Combina server_url + endpoint per URL completo
+            url = f"{self.config.fallback_server_url}{self.config.fallback_endpoint}"
+            
+            # Prepara payload JSON
+            payload = {
+                "uid": card_uid,
+                "direction": direction,
+                "gate_id": self.config.gate_id
+            }
+            
+            self.logger.info(f"🔥 Tentativo REST real-time per carta {card_uid}: {url}")
+            self.logger.debug(f"📦 Payload: {payload}")
+            
+            # Effettua richiesta HTTP POST con timeout breve
+            async with self._create_aiohttp_session(self.config.fallback_timeout) as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        fallback_data = await response.json()
+                        self.logger.info(f"🔥 Carta {card_uid} autorizzata via REST real-time!")
+                        
+                        # Verifica che la risposta contenga i dati necessari
+                        if not isinstance(fallback_data, dict):
+                            self.logger.error(f"❌ Risposta REST malformata per {card_uid}: {fallback_data}")
+                            return None
+                            
+                        # Verifica che la carta sia autorizzata
+                        if not fallback_data.get('authorized', False):
+                            self.logger.warning(f"🔐 Carta {card_uid} non autorizzata via REST")
+                            return None
+                        
+                        # 🔄 Adatta la risposta del fallback al formato del sistema interno
+                        # L'endpoint risponde con: {uid, authorized, message, identificativo_tornello}
+                        # Il sistema cache si aspetta: {card_uid, customer_id, customer_name, etc.}
+                        card_data = {
+                            'card_uid': fallback_data.get('uid', card_uid),
+                            'customer_id': f"FALLBACK_{card_uid}",  # ID temporaneo per fallback
+                            'customer_name': f"User {card_uid}",    # Nome temporaneo 
+                            'in_white_list': True,                  # Le carte dal fallback sono considerate autorizzate
+                            'active_subscriptions': [],             # Nessuna subscription dal fallback
+                            'authorized': True,                     # Autorizzazione confermata
+                            'reason': f"Autorizzato via REST real-time: {fallback_data.get('message', 'OK')}",
+                            'fallback_response': fallback_data      # Mantieni risposta originale per debug
+                        }
+                            
+                        return card_data
+                        
+                    elif response.status == 404:
+                        self.logger.debug(f"❌ Carta {card_uid} non trovata via REST")
+                        return None
+                        
+                    elif response.status == 401 or response.status == 403:
+                        self.logger.warning(f"🔐 Carta {card_uid} non autorizzata via REST")
+                        return None
+                        
+                    else:
+                        self.logger.warning(f"⚠️ Errore REST per {card_uid}: HTTP {response.status}")
+                        return None
+                        
+        except asyncio.TimeoutError:
+            self.logger.warning(f"⏰ Timeout REST real-time per carta {card_uid} ({self.config.fallback_timeout}s)")
+            return None
+        except Exception as e:
+            self.logger.error(f"❌ Errore REST real-time fallback: {e}")
+            return None
+    
+    def _cache_new_card_immediately(self, card_data: Dict[str, Any]):
+        """
+        🆕 Cache immediatamente una carta trovata via real-time.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Prepara dati per inserimento
+            card_uid = card_data.get('card_uid')
+            customer_id = card_data.get('customer_id')
+            customer_name = card_data.get('customer_name', '')
+            in_white_list = card_data.get('in_white_list', False)
+            active_subscriptions = card_data.get('active_subscriptions', [])
+            
+            # Converte subscriptions a JSON
+            subscriptions_json = json.dumps(active_subscriptions)
+            
+            # Inserisce/aggiorna nella cache
+            cursor.execute('''
+                INSERT OR REPLACE INTO synced_cards 
+                (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
+            ''', (
+                card_uid,
+                customer_id,
+                customer_name,
+                in_white_list,
+                subscriptions_json,
+                datetime.now().isoformat()
+            ))
+            
+            conn.commit()
+            self.logger.info(f"💾 Carta {card_uid} cached immediately from real-time")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Errore cache immediato: {e}")
+        finally:
+            conn.close()
 
 
 class MockResponse:

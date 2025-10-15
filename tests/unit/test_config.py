@@ -98,13 +98,13 @@ class TestRelayConfig(unittest.TestCase):
     """Test configurazione relè"""
     
     def test_default_config(self):
-        """Test configurazione di default"""
+        """Test configurazione di default (Legacy System)"""
         config = RelayConfig()
         self.assertTrue(config.enabled)
         self.assertEqual(config.pin, 18)
         self.assertEqual(config.active_time, 2)
-        self.assertFalse(config.active_low)
-        self.assertEqual(config.initial_state, "LOW")
+        self.assertTrue(config.active_low)  # Legacy: active_low=True
+        self.assertEqual(config.initial_state, "HIGH")  # Legacy: initial_state=HIGH
 
 
 class TestRFIDGateConfig(unittest.TestCase):
