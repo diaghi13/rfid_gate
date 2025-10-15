@@ -33,7 +33,7 @@ import asyncio
 import json
 import ssl
 import time
-from typing import Optional, Dict, Any, Callable, List
+from typing import Optional, Dict, Any, Callable, List, Union
 from dataclasses import dataclass, asdict
 from enum import Enum
 import uuid
@@ -279,10 +279,11 @@ class AsyncMQTTClient:
         self.on_message: Optional[Callable[[str, Dict[str, Any]], None]] = None
         self.on_auth_response: Optional[Callable[[str, Dict[str, Any]], None]] = None
         
-        # Tasks
+        # Tasks and event loop
         self._reconnect_task: Optional[asyncio.Task] = None
         self._queue_processor_task: Optional[asyncio.Task] = None
-        self._retry_processor_task: Optional[asyncio.Task] = None  # ✨ Nuovo task retry
+        self._retry_processor_task: Optional[Union[asyncio.Task, asyncio.Future]] = None  # ✨ Task o Future retry
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None  # ✨ Riferimento al loop
         
         # Statistics
         self.stats = {
@@ -359,8 +360,11 @@ class AsyncMQTTClient:
             
             print(f"🔌 Connessione a {self.config.broker}:{self.config.port}...")
             
+            # Salva riferimento al loop per callback
+            self._event_loop = asyncio.get_event_loop()
+            
             # Connessione asincrona
-            loop = asyncio.get_event_loop()
+            loop = self._event_loop
             
             def _connect():
                 return self.client.connect_async(self.config.broker, self.config.port, self.config.keep_alive)
@@ -403,7 +407,14 @@ class AsyncMQTTClient:
             # ✨ Avvia retry processor se abilitato e non già attivo
             if (getattr(self.config, 'enable_retry_queue', True) and 
                 (not self._retry_processor_task or self._retry_processor_task.done())):
-                self._retry_processor_task = asyncio.create_task(self._process_retry_queue())
+                
+                # Usa run_coroutine_threadsafe per eseguire da thread diverso
+                if self._event_loop and self._event_loop.is_running():
+                    self._retry_processor_task = asyncio.run_coroutine_threadsafe(
+                        self._process_retry_queue(), self._event_loop
+                    )
+                else:
+                    print("⚠️ Event loop non disponibile per retry processor")
             
             # Callback utente
             if self.on_connected:
