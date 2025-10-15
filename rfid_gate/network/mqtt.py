@@ -9,6 +9,24 @@ Client MQTT moderno con:
 - Message queuing
 - Type-safe configuration
 - Comprehensive error handling
+
+🔄 COMPATIBILITÀ LEGACY:
+Questa versione mantiene compatibilità completa con il payload legacy per garantire
+che il backend esistente continui a funzionare senza modifiche.
+
+✨ CAMPI FUTURI:
+I campi per la versione moderna dell'API sono commentati nelle dataclass.
+Per abilitarli in futuro:
+1. Decommentare i campi futuri nelle dataclass
+2. Aggiornare i metodi send_* per usare i nuovi campi
+3. Implementare backward compatibility nel backend
+4. Testare con entrambi i formati
+5. Migrare gradualmente
+
+📝 ROADMAP:
+- v1.0: Legacy compatibility (current)
+- v2.0: Hybrid mode (legacy + modern fields)
+- v3.0: Modern-only (deprecate legacy)
 """
 
 import asyncio
@@ -68,32 +86,156 @@ class MQTTMessage:
 
 @dataclass
 class CardReadMessage:
-    """Messaggio lettura carta"""
-    tornello_id: str
-    card_uid: str
-    direction: str  # "in" o "out"
-    reader_type: str  # "mfrc522" o "pn532"
-    timestamp: float
-    raw_uid: Optional[str] = None
-    metadata: Dict[str, Any] = None
+    """Messaggio lettura carta - COMPATIBILE CON LEGACY"""
+    # ========================================
+    # 🔄 CAMPI LEGACY (MANTENUTI PER COMPATIBILITÀ)
+    # ========================================
+    card_uid: str                           # UID carta formattato (legacy: uid_formatted)
+    identificativo_tornello: str            # ID tornello (legacy: identificativo_tornello)
+    direzione: str                          # "in" o "out" (legacy: direzione)
+    timestamp: str                          # ISO timestamp (legacy: timestamp)
+    raw_id: str                            # Raw ID carta (legacy: raw_id)
+    card_data: Optional[Dict[str, Any]] = None  # Dati carta completi (legacy: card_data)
+    hex_id: Optional[str] = None           # UID in hex (legacy: hex_id)
+    auth_required: bool = True             # Flag auth richiesta (legacy: auth_required)
+    reader_id: str = "unknown"             # ID reader (legacy: reader_id)
+    
+    # ========================================
+    # ✨ CAMPI FUTURI (COMMENTATI PER USO FUTURO)
+    # ========================================
+    # Quando sarà il momento di modernizzare l'API, decommentare questi campi:
+    # 
+    # tornello_id: str = None              # ✨ FUTURO: Nome moderno per identificativo_tornello
+    # direction: str = None                # ✨ FUTURO: Nome moderno per direzione  
+    # reader_type: str = None              # ✨ FUTURO: Tipo specifico reader ("mfrc522", "pn532")
+    # raw_uid: Optional[str] = None        # ✨ FUTURO: Nome moderno per raw_id
+    # uid_hex: Optional[str] = None        # ✨ FUTURO: Nome moderno per hex_id
+    # metadata: Dict[str, Any] = None      # ✨ FUTURO: Metadata aggiuntivi strutturati
+    # message_id: str = None               # ✨ FUTURO: ID messaggio univoco per tracking
+    # retry_count: int = 0                 # ✨ FUTURO: Contatore retry per resilienza
+    # priority: int = 0                    # ✨ FUTURO: Priorità messaggio (0=normale, 1=alta)
+    # source_version: str = "2.0"          # ✨ FUTURO: Versione protocollo per compatibilità
     
     def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
+        # Converte timestamp float a ISO string se necessario
+        if isinstance(self.timestamp, (int, float)):
+            from datetime import datetime
+            self.timestamp = datetime.fromtimestamp(self.timestamp).isoformat()
+        
+        # Assicura che raw_id sia stringa
+        if self.raw_id is not None:
+            self.raw_id = str(self.raw_id)
+    
+    @classmethod
+    def from_card_event(cls, card_event, tornello_id: str, auth_required: bool = True):
+        """Crea CardReadMessage da CardEvent mantenendo compatibilità legacy"""
+        from datetime import datetime
+        
+        return cls(
+            card_uid=card_event.uid_formatted,
+            identificativo_tornello=tornello_id,
+            direzione=card_event.direction,
+            timestamp=datetime.now().isoformat(),
+            raw_id=str(getattr(card_event, 'raw_uid', card_event.uid_formatted)),
+            card_data=getattr(card_event, 'data', None),
+            hex_id=getattr(card_event, 'uid_hex', card_event.uid_formatted),
+            auth_required=auth_required,
+            reader_id=getattr(card_event, 'reader_type', 'unknown')
+        )
+    
+    # ========================================
+    # ✨ METODI FUTURI (COMMENTATI)
+    # ========================================
+    # def to_modern_format(self) -> Dict[str, Any]:
+    #     """Converte al formato moderno per API v2"""
+    #     return {
+    #         "card_uid": self.card_uid,
+    #         "tornello_id": self.identificativo_tornello,  # Nome moderno
+    #         "direction": self.direzione,                  # Nome moderno
+    #         "reader_type": self.reader_id,
+    #         "timestamp": self.timestamp,
+    #         "raw_uid": self.raw_id,
+    #         "metadata": self.card_data or {}
+    #     }
+    # 
+    # @property
+    # def is_legacy_compatible(self) -> bool:
+    #     """Verifica se il messaggio è compatibile con legacy"""
+    #     required_fields = ['card_uid', 'identificativo_tornello', 'direzione']
+    #     return all(hasattr(self, field) for field in required_fields)
 
 
 @dataclass
 class AuthRequest:
-    """Richiesta autenticazione"""
-    card_uid: str
-    tornello_id: str
-    direction: str
-    timestamp: float
-    request_id: str = None
+    """Richiesta autenticazione - COMPATIBILE CON LEGACY"""
+    # ========================================
+    # 🔄 CAMPI LEGACY (MANTENUTI PER COMPATIBILITÀ)
+    # ========================================
+    card_uid: str                          # UID carta (compatibile con legacy)
+    identificativo_tornello: str           # ID tornello (legacy: identificativo_tornello)
+    direzione: str                         # Direzione (legacy: direzione)
+    timestamp: str                         # ISO timestamp (legacy: timestamp)
+    auth_required: bool = True             # Flag auth (legacy: auth_required)
+    
+    # ========================================
+    # ✨ CAMPI FUTURI (COMMENTATI PER USO FUTURO)
+    # ========================================
+    # Quando sarà il momento di modernizzare l'API, decommentare questi campi:
+    # 
+    # tornello_id: str = None              # ✨ FUTURO: Nome moderno per identificativo_tornello
+    # direction: str = None                # ✨ FUTURO: Nome moderno per direzione
+    # request_id: str = None               # ✨ FUTURO: ID richiesta univoco per tracking
+    # timeout: int = 30                    # ✨ FUTURO: Timeout specifico per questa richiesta
+    # priority: int = 0                    # ✨ FUTURO: Priorità richiesta (0=normale, 1=alta)
+    # retry_count: int = 0                 # ✨ FUTURO: Contatore retry
+    # correlation_id: str = None           # ✨ FUTURO: ID correlazione per tracing distribuito
+    # client_version: str = "2.0"          # ✨ FUTURO: Versione client per compatibilità
+    # auth_method: str = "default"         # ✨ FUTURO: Metodo auth ("default", "biometric", "pin")
+    # metadata: Dict[str, Any] = None      # ✨ FUTURO: Metadata aggiuntivi per context
     
     def __post_init__(self):
-        if self.request_id is None:
-            self.request_id = str(uuid.uuid4())[:8]
+        # Converte timestamp float a ISO string se necessario
+        if isinstance(self.timestamp, (int, float)):
+            from datetime import datetime
+            self.timestamp = datetime.fromtimestamp(self.timestamp).isoformat()
+    
+    @classmethod
+    def from_card_event(cls, card_event, tornello_id: str, auth_required: bool = True):
+        """Crea AuthRequest da CardEvent mantenendo compatibilità legacy"""
+        from datetime import datetime
+        
+        return cls(
+            card_uid=card_event.uid_formatted,
+            identificativo_tornello=tornello_id,
+            direzione=card_event.direction,
+            timestamp=datetime.now().isoformat(),
+            auth_required=auth_required
+        )
+    
+    # ========================================
+    # ✨ METODI FUTURI (COMMENTATI)
+    # ========================================
+    # def to_modern_format(self) -> Dict[str, Any]:
+    #     """Converte al formato moderno per API v2"""
+    #     return {
+    #         "card_uid": self.card_uid,
+    #         "tornello_id": self.identificativo_tornello,
+    #         "direction": self.direzione,
+    #         "timestamp": self.timestamp,
+    #         "request_id": str(uuid.uuid4())[:8],
+    #         "auth_required": self.auth_required
+    #     }
+    # 
+    # def generate_request_id(self) -> str:
+    #     """Genera ID richiesta univoco per tracking"""
+    #     return f"{self.card_uid}_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+    # 
+    # @property
+    # def is_expired(self, timeout: int = 30) -> bool:
+    #     """Verifica se la richiesta è scaduta"""
+    #     from datetime import datetime
+    #     request_time = datetime.fromisoformat(self.timestamp)
+    #     return (datetime.now() - request_time).total_seconds() > timeout
 
 
 class AsyncMQTTClient:
@@ -374,7 +516,7 @@ class AsyncMQTTClient:
     
     async def send_card_read(self, card_message: CardReadMessage) -> bool:
         """
-        Invia messaggio lettura carta.
+        Invia messaggio lettura carta con payload LEGACY compatibile.
         
         Args:
             card_message: Messaggio carta letta
@@ -383,28 +525,48 @@ class AsyncMQTTClient:
             bool: True se inviato/accodato con successo
         """
         try:
-            # Crea topic
-            topic = f"gate/{card_message.tornello_id}/card_read"
+            # ========================================
+            # 🔄 PAYLOAD LEGACY COMPATIBILE
+            # ========================================
+            payload = {
+                "card_uid": card_message.card_uid,
+                "identificativo_tornello": card_message.identificativo_tornello,
+                "direzione": card_message.direzione,
+                "timestamp": card_message.timestamp,
+                "raw_id": card_message.raw_id,
+                "card_data": card_message.card_data,
+                "hex_id": card_message.hex_id,
+                "auth_required": card_message.auth_required,
+                "reader_id": card_message.reader_id
+            }
             
-            # Crea payload
-            payload = asdict(card_message)
+            # Topic dinamico (manteniamo il nuovo formato topic)
+            topic = f"gate/{card_message.identificativo_tornello}/card_read"
             
             # Crea messaggio MQTT
             mqtt_msg = MQTTMessage(
                 topic=topic,
                 payload=payload,
-                qos=0
+                qos=1  # QoS 1 come nel legacy
             )
             
-            return await self._send_message(mqtt_msg)
+            success = await self._send_message(mqtt_msg)
+            
+            if success:
+                print(f"✅ Card read inviato (legacy compatible): {card_message.card_uid}")
+                print(f"📍 Topic: {topic}")
+            else:
+                print(f"❌ Errore invio card read: {card_message.card_uid}")
+            
+            return success
             
         except Exception as e:
-            print(f"❌ Errore invio card read: {e}")
+            print(f"❌ Errore send_card_read: {e}")
             return False
     
     async def send_auth_request(self, auth_request: AuthRequest) -> Optional[str]:
         """
-        Invia richiesta autenticazione.
+        Invia richiesta autenticazione con payload LEGACY compatibile.
         
         Args:
             auth_request: Richiesta autenticazione
@@ -413,9 +575,49 @@ class AsyncMQTTClient:
             Optional[str]: Request ID se inviato, None se errore
         """
         try:
-            # Registra richiesta pending
-            self.pending_auths[auth_request.request_id] = auth_request
+            # Genera request_id per tracking (anche se non nel payload legacy)
+            request_id = str(uuid.uuid4())[:8]
+            
+            # ========================================
+            # 🔄 PAYLOAD LEGACY COMPATIBILE
+            # ========================================
+            payload = {
+                "card_uid": auth_request.card_uid,
+                "identificativo_tornello": auth_request.identificativo_tornello,
+                "direzione": auth_request.direzione,
+                "timestamp": auth_request.timestamp,
+                "auth_required": auth_request.auth_required
+            }
+            
+            # Topic dinamico (manteniamo il nuovo formato topic)
+            topic = f"gate/{auth_request.identificativo_tornello}/auth_request"
+            
+            # Registra richiesta pending per tracking interno
+            self.pending_auths[request_id] = auth_request
             self.stats['auth_requests'] += 1
+            
+            # Crea messaggio MQTT
+            mqtt_msg = MQTTMessage(
+                topic=topic,
+                payload=payload,
+                qos=1  # QoS 1 come nel legacy
+            )
+            
+            success = await self._send_message(mqtt_msg)
+            
+            if success:
+                print(f"✅ Auth request inviato (legacy compatible): {auth_request.card_uid}")
+                print(f"📍 Topic: {topic}")
+                return request_id
+            else:
+                print(f"❌ Errore invio auth request: {auth_request.card_uid}")
+                # Rimuovi dalla pending se fallisce
+                self.pending_auths.pop(request_id, None)
+                return None
+                
+        except Exception as e:
+            print(f"❌ Errore send_auth_request: {e}")
+            return None
             
             # Crea topic
             topic = f"gate/{auth_request.tornello_id}/auth_request"

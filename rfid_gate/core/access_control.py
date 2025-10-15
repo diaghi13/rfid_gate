@@ -438,16 +438,15 @@ class AccessControlSystem:
             print(f"❌ Errore processing card event: {e}")
     
     async def _send_card_data(self, card_event: CardEvent):
-        """Invia dati carta via MQTT"""
+        """Invia dati carta via MQTT con payload LEGACY compatibile"""
         try:
-            message = CardReadMessage(
+            # ========================================
+            # 🔄 USA FACTORY METHOD LEGACY COMPATIBLE
+            # ========================================
+            message = CardReadMessage.from_card_event(
+                card_event=card_event,
                 tornello_id=self.config.system.tornello_id,
-                card_uid=card_event.uid_formatted,
-                direction=card_event.direction,
-                reader_type=card_event.reader_type,
-                timestamp=card_event.timestamp,
-                raw_uid=card_event.uid,
-                metadata=card_event.metadata
+                auth_required=self.config.auth.enabled
             )
             
             await self.mqtt_client.send_card_read(message)
@@ -569,12 +568,13 @@ class AccessControlSystem:
                 # Fallback a modalità offline
                 return self._offline_authentication(card_event.uid_formatted)
             
-            # Crea richiesta autenticazione
-            auth_request = AuthRequest(
-                card_uid=card_event.uid_formatted,
+            # ========================================
+            # 🔄 USA FACTORY METHOD LEGACY COMPATIBLE
+            # ========================================
+            auth_request = AuthRequest.from_card_event(
+                card_event=card_event,
                 tornello_id=self.config.system.tornello_id,
-                direction=card_event.direction,
-                timestamp=card_event.timestamp
+                auth_required=self.config.auth.enabled
             )
             
             # Invia richiesta
