@@ -1209,6 +1209,24 @@ class SyncManager:
             self.logger.error(f"❌ Errore cache immediato: {e}")
         finally:
             conn.close()
+    
+    async def stop(self):
+        """Ferma il SyncManager e cleanup risorse"""
+        try:
+            self.logger.info("🛑 Stopping SyncManager...")
+            
+            # Ferma background sync
+            await self.stop_background_sync()
+            
+            # Cleanup thread scheduler se presente
+            if self.scheduler_thread and self.scheduler_thread.is_alive():
+                self.running = False
+                # Non forziamo join per evitare blocchi
+            
+            self.logger.info("✅ SyncManager stopped")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Errore stop SyncManager: {e}")
 
 
 class MockResponse:

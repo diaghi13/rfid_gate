@@ -26,7 +26,17 @@ Per abilitarli in futuro:
 📝 ROADMAP:
 - v1.0: Legacy compatibility (current)
 - v2.0: Hybrid mode (legacy + modern fields)
-- v3.0: Modern-only (deprecate legacy)
+- v3.0: Mo            print("✅ Client MQTT cleanup completato")
+            
+        except Exception as e:
+            print(f"❌ Errore cleanup MQTT: {e}")
+    
+    async def disconnect(self):
+        """Disconnette il client MQTT (alias per cleanup)"""
+        await self.cleanup()
+
+
+# Exportly (deprecate legacy)
 """
 
 import asyncio
@@ -853,6 +863,10 @@ class AsyncMQTTClient:
             
         except Exception as e:
             print(f"❌ Errore cleanup MQTT: {e}")
+    
+    async def disconnect(self):
+        """Disconnette il client MQTT (alias per cleanup)"""
+        await self.cleanup()
 
 
 # Export

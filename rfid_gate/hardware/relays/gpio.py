@@ -13,7 +13,7 @@ Implementazione relè GPIO per Raspberry Pi con:
 import asyncio
 import atexit
 from typing import Optional
-from rfid_gate.hardware.relays.base import BaseRelayController
+from rfid_gate.hardware.relays.base import BaseRelayController, RelayState
 
 # Import condizionale per hardware
 try:
@@ -256,6 +256,28 @@ class GPIORelayController(BaseRelayController):
         except Exception as e:
             print(f"❌ Errore test {self.relay_id}: {e}")
             return False
+    
+    async def close(self):
+        """Chiude il relè e resetta lo stato (alias per cleanup)"""
+        await self.cleanup()
+    
+    async def cleanup(self):
+        """Cleanup del relè GPIO"""
+        try:
+            if self.is_setup and HAS_HARDWARE:
+                # Resetta pin a stato iniziale
+                GPIO.output(self.pin, self.initial_state_value)
+                print(f"🧹 {self.relay_id} cleanup - pin {self.pin} reset")
+            
+            # Rimuovi dalla registry globale
+            if self in self._global_relays:
+                self._global_relays.discard(self)
+            
+            self.is_setup = False
+            self.state = RelayState.OFF
+            
+        except Exception as e:
+            print(f"❌ Errore cleanup {self.relay_id}: {e}")
     
     def __str__(self) -> str:
         return f"GPIO({self.relay_id}, pin={self.pin}, {self.direction}, {self.state.value})"
