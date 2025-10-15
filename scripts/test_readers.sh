@@ -190,7 +190,20 @@ test_python_deps() {
         print_warning "Libreria board non installata"
     fi
     
-    # Test progetto\n    if [ -f \"main.py\" ]; then\n        print_success \"Progetto RFID Gate trovato\"\n        \n        # Test import configurazione\n        if python3 -c \"from rfid_gate.config.settings import RFIDGateConfig; config = RFIDGateConfig.load_from_env(); print('Config OK')\" 2>/dev/null; then\n            print_success \"Configurazione Python valida\"\n        else\n            print_error \"Errore nella configurazione Python\"\n        fi\n    else\n        print_error \"File main.py non trovato\"\n        return 1\n    fi
+    # Test progetto
+    if [ -f "main.py" ]; then
+        print_success "Progetto RFID Gate trovato"
+        
+        # Test import configurazione
+        if python3 -c "from rfid_gate.config.settings import RFIDGateConfig; config = RFIDGateConfig.from_env(); print('Config OK')" 2>/dev/null; then
+            print_success "Configurazione Python valida"
+        else
+            print_error "Errore nella configurazione Python"
+        fi
+    else
+        print_error "File main.py non trovato"
+        return 1
+    fi
 }
 
 # Test lettori RFID

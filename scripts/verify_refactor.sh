@@ -60,8 +60,8 @@ if [ -f ".env" ]; then
     echo -e "${GREEN}✅ File .env presente${NC}"
     if python3 -c "
 from rfid_gate.config.settings import RFIDGateConfig
-config = RFIDGateConfig.load_from_env()
-print(f'✅ Config caricata: {config.tornello_id}')
+config = RFIDGateConfig.from_env()
+print(f'✅ Config caricata: {config.system.tornello_id}')
 " 2>/dev/null; then
         echo -e "${GREEN}✅ Configurazione caricata${NC}"
     else
@@ -74,8 +74,8 @@ import os
 os.environ['MQTT_BROKER'] = 'test.broker.com'
 os.environ['TORNELLO_ID'] = 'test_01'
 from rfid_gate.config.settings import RFIDGateConfig
-config = RFIDGateConfig.load_from_env()
-print(f'✅ Config test OK: {config.tornello_id}')
+config = RFIDGateConfig.from_env()
+print(f'✅ Config test OK: {config.system.tornello_id}')
 " 2>/dev/null; then
         echo -e "${GREEN}✅ Configurazione test OK${NC}"
     else

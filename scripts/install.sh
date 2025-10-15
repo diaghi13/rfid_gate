@@ -536,7 +536,7 @@ import sys
 sys.path.insert(0, '.')
 try:
     from rfid_gate.config.settings import RFIDGateConfig
-    config = RFIDGateConfig.load_from_env()
+    config = RFIDGateConfig.from_env()
     print('✅ Config caricata correttamente')
     print(f'   Tornello ID: {config.tornello_id}')
     print(f'   MQTT Broker: {config.mqtt_broker}')

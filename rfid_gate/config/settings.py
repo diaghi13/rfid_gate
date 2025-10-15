@@ -381,6 +381,11 @@ class RFIDGateConfig:
             logging=logging_config
         )
     
+    @classmethod
+    def load_from_env(cls) -> 'RFIDGateConfig':
+        """Alias per compatibilità - deprecato, usa from_env()"""
+        return cls.from_env()
+    
     def get_mqtt_topic(self, action: str = "badge") -> str:
         """Genera topic MQTT per azione specifica"""
         return f"gate/{self.system.tornello_id}/{action}"
