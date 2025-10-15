@@ -9,6 +9,7 @@ Fornisce una base comune per GPIO relay e futuri controller.
 
 import asyncio
 import time
+import threading
 from abc import ABC, abstractmethod
 from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass
@@ -70,6 +71,11 @@ class BaseRelayController(ABC):
         
         # Task attivazione corrente
         self._activation_task: Optional[asyncio.Task] = None
+        
+        # Thread attivazione (legacy-compatible)
+        self._activation_thread: Optional[threading.Thread] = None
+        self._thread_lock = threading.Lock()
+        self._stop_thread = False
         
         # Statistiche
         self.stats = {
@@ -218,7 +224,7 @@ class BaseRelayController(ABC):
     async def activate(self, duration: Optional[float] = None, 
                       trigger_source: str = "manual") -> bool:
         """
-        Attiva relè per durata specificata.
+        Attiva relè per durata specificata (LEGACY-COMPATIBLE con threading).
         
         Args:
             duration: Durata attivazione (usa self.active_time se None)
@@ -231,20 +237,27 @@ class BaseRelayController(ABC):
             print(f"⚠️ {self.relay_id} già in attivazione")
             return False
         
-        # Annulla attivazione precedente se ancora in corso
-        if self._activation_task and not self._activation_task.done():
-            self._activation_task.cancel()
-        
         duration = duration or self.active_time
         
+        with self._thread_lock:
+            # Ferma thread precedente se ancora in corso
+            if self._activation_thread and self._activation_thread.is_alive():
+                self._stop_thread = True
+                # Non fare join per evitare blocchi
+            
+            self._stop_thread = False
+            
         try:
             self.set_state(RelayState.ACTIVATING, duration, trigger_source)
             self.stats['activations_total'] += 1
             
-            # Crea task per attivazione temporizzata
-            self._activation_task = asyncio.create_task(
-                self._timed_activation(duration, trigger_source)
+            # Crea Thread per attivazione temporizzata (COME NEL LEGACY)
+            self._activation_thread = threading.Thread(
+                target=self._thread_activation_worker,
+                args=(duration, trigger_source),
+                daemon=False  # Non daemon per garantire completamento
             )
+            self._activation_thread.start()
             
             return True
             
@@ -257,6 +270,71 @@ class BaseRelayController(ABC):
             
             print(f"❌ {self.relay_id} errore attivazione: {e}")
             return False
+    
+    def _thread_activation_worker(self, duration: float, trigger_source: str) -> None:
+        """Worker thread per attivazione temporizzata (IDENTICO AL LEGACY)"""
+        current_thread = threading.current_thread()
+        
+        try:
+            start_time = time.time()
+            
+            # Attiva relè (sincrono)
+            target_state = not self.active_low  # ON
+            success = asyncio.run(self._hardware_set_state(target_state))
+            
+            if not success:
+                raise Exception("Fallimento attivazione hardware")
+            
+            self.set_state(RelayState.ON, duration, trigger_source)
+            self.last_activation_time = start_time
+            self.activation_count += 1
+            
+            print(f"⚡ {self.relay_id}: ON per {duration}s")
+            
+            # Aspetta con controlli di interruzione (COME NEL LEGACY)
+            elapsed = 0
+            while elapsed < duration:
+                with self._thread_lock:
+                    if self._stop_thread:
+                        return
+                
+                sleep_time = min(0.1, duration - elapsed)
+                time.sleep(sleep_time)
+                elapsed += sleep_time
+            
+            # Disattiva relè
+            with self._thread_lock:
+                if not self._stop_thread:
+                    target_state = self.active_low  # OFF
+                    success = asyncio.run(self._hardware_set_state(target_state))
+                    
+                    if not success:
+                        raise Exception("Fallimento disattivazione hardware")
+                    
+                    # Aggiorna statistiche
+                    actual_duration = time.time() - start_time
+                    self.total_on_time += actual_duration
+                    self.stats['activations_successful'] += 1
+                    self.stats['total_on_time_seconds'] = self.total_on_time
+                    
+                    self.set_state(RelayState.OFF, trigger_source=trigger_source)
+                    print(f"✅ {self.relay_id}: OFF dopo {actual_duration:.2f}s")
+            
+        except Exception as e:
+            with self._thread_lock:
+                # Spegni in caso di errore
+                try:
+                    asyncio.run(self._hardware_set_state(self.active_low))
+                except:
+                    pass
+                
+                self.set_state(RelayState.ERROR, trigger_source=trigger_source)
+                self.stats['activations_failed'] += 1
+                
+                if self.on_error:
+                    self.on_error(e)
+                
+                print(f"❌ {self.relay_id} errore durante attivazione thread: {e}")
     
     async def _timed_activation(self, duration: float, trigger_source: str) -> None:
         """Gestisce attivazione temporizzata"""
@@ -312,9 +390,15 @@ class BaseRelayController(ABC):
             print(f"❌ {self.relay_id} errore durante attivazione: {e}")
     
     async def force_off(self) -> bool:
-        """Forza spegnimento relè"""
+        """Forza spegnimento relè (legacy-compatible)"""
         try:
-            # Cancella attivazione in corso
+            # Ferma thread se attivo
+            with self._thread_lock:
+                if self._activation_thread and self._activation_thread.is_alive():
+                    self._stop_thread = True
+                    # Non fare join per evitare blocchi
+            
+            # Cancella anche task async se presente (backward compatibility)
             if self._activation_task and not self._activation_task.done():
                 self._activation_task.cancel()
                 await asyncio.sleep(0.1)  # Attendi cancellazione
