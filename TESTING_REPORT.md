@@ -1,4 +1,43 @@
-# 🧪 TESTING REPORT - Flusso Intelligente RFID Gate
+# 🧪 TESTING REPORT - Flusso Int## 🔍 **Issue Rilevato - Race Condition**
+
+### ⚠️ **Problema Identificato**:
+
+**Due chiamate simultanee** per carta `F24FC4EB` (PIETRO SALERNO):
+
+```
+1777  16/10/2025, 17:51:58  F24FC4EB  NEGATO   "Cannot in again - last action was in"
+1776  16/10/2025, 17:51:58  F24FC4EB  CONCESSO "Accesso autorizzato (modalità offline) | Cache"
+```
+
+### 🧪 **Test Race Condition Eseguito**:
+
+- **File Test**: `test_race_condition_debug.py`
+- **Risultato**: ✅ **SCENARIO RIPRODOTTO**
+- **Causa**: Processing parallelo invece che sequenziale
+
+### 🎯 **Root Cause**:
+
+Il sistema processa la stessa lettura fisica attraverso due flussi:
+
+1. **Flusso Cache**: Autorizzazione cache → CONCESSO
+2. **Flusso Bidirezionale**: Controllo direzione → NEGATO
+
+### ✅ **Soluzione Implementata**:
+
+Il controllo bidirezionale è **già posizionato PRIMA** del cache check nel codice:
+
+```python
+# ORDINE CORRETTO in _authenticate_card():
+1. 🔐 WHITELIST CHECK (priorità assoluta)
+2. 🔄 CONTROLLO BIDIREZIONALE (prima del cache)
+3. 📱 CACHE/AUTH LOGIC (dopo validazione)
+```
+
+### 📋 **Verifica Configurazione**:
+
+- ✅ Whitelist bypass implementato
+- ✅ Controllo bidirezionale prioritario
+- ✅ Ordine validazione corretto nel codicelligente RFID Gate
 
 ## 📊 Riepilogo Test Completati (16 Ottobre 2025)
 

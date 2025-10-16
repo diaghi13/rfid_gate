@@ -14,7 +14,6 @@ Modules:
 """
 
 __version__ = "2.0.0"
-__author__ = "David Donghi"
 
 from rfid_gate.core.access_control import AccessControlSystem
 from rfid_gate.config.settings import RFIDGateConfig
