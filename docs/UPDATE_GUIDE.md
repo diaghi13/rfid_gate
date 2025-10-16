@@ -63,8 +63,9 @@ Se l'aggiornamento fallisce, lo script ripristina **automaticamente**:
 ```
 
 **Quando usarlo:**
+
 - Corruzione sistema dopo giorni/settimane
-- Problemi non legati all'aggiornamento  
+- Problemi non legati all'aggiornamento
 - Ripristino a una versione specifica del passato
 
 ### 🧹 Pulizia Automatica Backup
@@ -72,6 +73,7 @@ Se l'aggiornamento fallisce, lo script ripristina **automaticamente**:
 Il sistema include pulizia automatica intelligente dei backup obsoleti:
 
 #### **🚀 Pulizia Integrata (Automatica)**
+
 Durante ogni aggiornamento, viene eseguita automaticamente la pulizia secondo questa configurazione:
 
 ```bash
@@ -83,6 +85,7 @@ BACKUP_MAX_KEEP=20                 # Mantieni al massimo 20 backup
 ```
 
 #### **🛠️ Pulizia Manuale**
+
 ```bash
 # Pulizia standard
 ./scripts/cleanup_backups.sh
@@ -98,7 +101,9 @@ BACKUP_MAX_KEEP=20                 # Mantieni al massimo 20 backup
 ```
 
 #### **⏰ Pulizia Programmata (Cron)**
+
 Per pulizia settimanale automatica:
+
 ```bash
 # Modifica crontab
 crontab -e
@@ -108,13 +113,16 @@ crontab -e
 ```
 
 #### **📊 Logica di Pulizia Intelligente**
+
 1. **🗓️ Età**: Elimina backup più vecchi di `RETENTION_DAYS`
 2. **🔢 Minimo**: Mantiene sempre almeno `MIN_KEEP` backup (anche se vecchi)
 3. **🔢 Massimo**: Se ci sono più di `MAX_KEEP` backup, elimina i più vecchi
 4. **🛡️ Sicurezza**: Non elimina mai tutto, preserva sempre backup recenti
 
 #### **🎯 Personalizzazione**
+
 Crea file di configurazione personalizzato:
+
 ```bash
 # File: /opt/rfid-gate/.env.backup
 AUTO_CLEANUP_ENABLED=true
