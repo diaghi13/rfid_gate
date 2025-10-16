@@ -518,10 +518,26 @@ class AccessControlSystem:
         🎯 NUOVO FLUSSO INTELLIGENTE - Cache First con MQTT Parallelo e Fallback Diretto
         ================================================================================
         
-        CASO 1: Carta in cache → Cache auth + MQTT parallelo
-        CASO 2: Carta NON in cache → Cache refresh → Se non trova: Fallback diretto (NO MQTT)
-        CASO 3: Carta scaduta → Cache refresh → Cache auth + MQTT parallelo  
-        WHITELIST: Sempre autorizzata con bypass IN/OUT
+        📱 CASO 1: Carta in cache
+           → Carta letta → autenticazione cache → apertura relè
+           → Log: UNA entry di autorizzazione
+           → In parallelo dopo validazione cache: MQTT → broker → gate-verification (non uso risposta)
+
+        📱 CASO 2: Carta NON in cache  
+           → Carta letta → carta non trovata
+           → Cache refresh: GET /api/sync-gate?card_uid=XXX
+           → Se trova dati → autenticazione cache e aggiorna dati → MQTT parallelo
+           → Se ancora non trova: chiamata /api/gate-verification (senza MQTT parallelo)
+           → Log: UNA entry di autorizzazione finale
+
+        📱 CASO 3: Carta con abbonamento scaduto
+           → Carta letta → abbonamento scaduto o non esistente  
+           → Cache refresh: GET /api/sync-gate?card_uid=XXX
+           → Se trova rinnovo → autenticazione cache → aggiorna cache
+           → Log: UNA entry con nuovo abbonamento
+           → In parallelo dopo autenticazione cache: MQTT → broker (non uso risposta)
+           
+        🔐 WHITELIST: Sempre autorizzata con bypass IN/OUT
         """
         try:
             print(f"🎯 Flusso intelligente per carta: {card_event.uid_formatted}")
@@ -626,8 +642,8 @@ class AccessControlSystem:
                             )
                             
                             if refreshed_result['authorized']:
-                                # ✅ CASO 3: Cache refresh ha risolto (es. abbonamento rinnovato)
-                                print(f"✅ CASO 3: Cache refresh risolto per {card_event.uid_formatted}")
+                                # ✅ CASO 3: Cache refresh ha risolto (es. abbonamento rinnovato/scaduto)
+                                print(f"✅ CASO 3: Cache refresh risolto per {card_event.uid_formatted} - CON MQTT parallelo")
                                 
                                 # Update bidirezionale
                                 if self.config.system.bidirectional_mode:
@@ -638,10 +654,10 @@ class AccessControlSystem:
                                         customer_id=refreshed_result.get('customer_id')
                                     )
                                 
-                                # Log immediato
-                                await self._log_authorized_access(card_event, refreshed_result)
+                                # Log immediato con nuovo abbonamento
+                                await self._log_authorized_access(card_event, refreshed_result, source="cache_refresh")
                                 
-                                # MQTT parallelo per logging
+                                # ✅ CASO 3: MQTT parallelo per logging dopo trovata carta in cache refresh
                                 if (self.config.auth.enabled and self.mqtt_client and 
                                     self.mqtt_client.is_connected()):
                                     await self._send_parallel_mqtt_logging(card_event)
@@ -660,14 +676,23 @@ class AccessControlSystem:
                         )
                         
                         if direct_result['authorized']:
-                            print(f"✅ FALLBACK: Gate-verification autorizza {card_event.uid_formatted}")
+                            print(f"✅ CASO 2: Gate-verification autorizza {card_event.uid_formatted} (NO MQTT parallelo)")
                             
-                            # Log immediato fallback (NO MQTT parallelo per evitare duplicati)
+                            # Update bidirezionale se necessario
+                            if self.config.system.bidirectional_mode:
+                                await self.sync_manager.update_user_direction(
+                                    card_uid=card_event.uid_formatted,
+                                    direction=card_event.direction,
+                                    tornello_id=self.config.system.tornello_id,
+                                    customer_id=direct_result.get('customer_id')
+                                )
+                            
+                            # Log immediato fallback - IMPORTANTE: NO MQTT parallelo per CASO 2
                             await self._log_authorized_access(card_event, direct_result, source="fallback")
                             
                             return AccessDecision.GRANT
                         else:
-                            print(f"❌ FALLBACK: Gate-verification nega {card_event.uid_formatted}")
+                            print(f"❌ CASO 2: Gate-verification nega {card_event.uid_formatted}")
                             await self._log_denied_access(card_event, direct_result['reason'], source="fallback")
                             return AccessDecision.DENY
                             
@@ -1121,11 +1146,11 @@ class AccessControlSystem:
             endpoint = os.getenv('GATE_VERIFICATION_ENDPOINT', '/api/gate-verification')
             url = f"{server_url}{endpoint}"
             
-            # Payload per gate-verification
+            # Payload per gate-verification (come da specifiche)
             payload = {
                 "uid": card_uid,
-                "identificativo_tornello": self.config.system.tornello_id,
-                "direction": direction  # Includi direzione se necessario
+                "direction": direction,
+                "gate_id": self.config.system.tornello_id
             }
             
             print(f"🔗 Chiamata diretta gate-verification: {url}")

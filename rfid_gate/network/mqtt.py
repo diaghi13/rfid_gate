@@ -705,9 +705,8 @@ class AsyncMQTTClient:
                 "auth_required": auth_request.auth_required
             }
             
-            # Topic dinamico basato su configurazione
-            base_topic = '/'.join(self.config.auth_response_topic.split('/')[:-1])
-            topic = f"{base_topic}/auth_request"
+            # Topic per invio badge (card_read_topic è il topic giusto per inviare)
+            topic = self.config.card_read_topic
             
             # Crea messaggio MQTT
             mqtt_msg = MQTTMessage(
