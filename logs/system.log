@@ -49,3 +49,19 @@
 2025-10-04 04:57:48 - INFO - Accesso AUTORIZZATO - Card: N/A - Dir: unknown - Relè: ATTIVATO
 2025-10-04 04:57:50 - INFO - Accesso AUTORIZZATO - Card: N/A - Dir: unknown - Relè: ATTIVATO
 2025-10-04 04:57:52 - INFO - Accesso AUTORIZZATO - Card: N/A - Dir: unknown - Relè: ATTIVATO
+2025-10-16 15:16:46,009 - INFO - ✅ Test logging INFO
+2025-10-16 15:16:46,009 - WARNING - ⚠️ Test logging WARNING
+2025-10-16 15:16:46,009 - ERROR - ❌ Test logging ERROR
+2025-10-16 15:16:46,009 - INFO - 🔧 Print() ora scrive anche nei log!
+2025-10-16 15:16:46,009 - INFO - ✅ Questo dovrebbe apparire nei log
+2025-10-16 15:16:46,010 - WARNING - ⚠️ Questo è un warning
+2025-10-16 15:16:46,010 - ERROR - ❌ Questo è un errore
+2025-10-16 15:16:46,010 - INFO - 📋 Questo è un messaggio normale
+2025-10-16 15:16:46,010 - INFO - 
+📄 Log file creato: /Users/davidedonghi/Apps/_micro services/rfid_gate/logs/system.log
+2025-10-16 15:16:46,010 - INFO -    Contenuto:
+2025-10-16 15:16:46,013 - ERROR -       2025-10-16 15:16:46,010 - ERROR - ❌ Questo è un errore
+2025-10-16 15:16:46,014 - INFO -       2025-10-16 15:16:46,010 - INFO - 📋 Questo è un messaggio normale
+2025-10-16 15:16:46,014 - INFO -       2025-10-16 15:16:46,010 - INFO -
+2025-10-16 15:16:46,014 - INFO -       📄 Log file creato: /Users/davidedonghi/Apps/_micro services/rfid_gate/logs/system.log
+2025-10-16 15:16:46,014 - INFO -       2025-10-16 15:16:46,010 - INFO -    Contenuto:
