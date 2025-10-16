@@ -196,6 +196,14 @@ class SyncManager:
             )
         ''')
         
+        # Migrazione: Aggiungi colonna last_server_check se non esiste
+        try:
+            cursor.execute('ALTER TABLE synced_cards ADD COLUMN last_server_check TIMESTAMP')
+            self.logger.info("✅ Migrazione: Aggiunta colonna last_server_check")
+        except sqlite3.OperationalError:
+            # Colonna già esistente
+            pass
+        
         # Tabella log in attesa di sincronizzazione
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS pending_logs (

@@ -456,9 +456,10 @@ class AccessControlSystem:
         try:
             print(f"📇 {card_event.direction} - Carta: {card_event.uid_formatted} ({card_event.reader_type})")
             
-            # Invia dati via MQTT (se online)
-            if self.mode == SystemMode.ONLINE and self.mqtt_client:
-                await self._send_card_data(card_event)
+            # 🚀 MQTT Fix: Rimuoviamo invio duplicato qui
+            # L'invio MQTT ora avviene DENTRO _authenticate_card() in parallelo
+            # if self.mode == SystemMode.ONLINE and self.mqtt_client:
+            #     await self._send_card_data(card_event)
             
             # Processa autenticazione
             decision = await self._authenticate_card(card_event)
@@ -572,8 +573,56 @@ class AccessControlSystem:
                             tornello_id=self.config.system.tornello_id,
                             customer_id=sync_result.get('customer_id')
                         )
+                
+                elif not sync_result['authorized'] and self.mode == SystemMode.ONLINE:
+                    # 🔄 STRATEGIA REFRESH: Carta negata dalla cache, prova refresh da server
+                    # Questo gestisce il caso di abbonamenti rinnovati non ancora sincronizzati
+                    print(f"🔄 Carta {card_event.uid_formatted} negata dalla cache - tentativo refresh server...")
                     
-                    # � LOGGING SEPARATO: Due flussi distinti
+                    try:
+                        # Importa il cache refresh manager
+                        from cache_refresh_strategy import CacheRefreshManager
+                        refresh_mgr = CacheRefreshManager(self.sync_manager)
+                        
+                        # Prova refresh intelligente (SOLO aggiorna cache, non autorizza)
+                        cache_updated = await refresh_mgr.handle_denied_card_refresh(card_event.uid_formatted)
+                        
+                        if cache_updated:
+                            print(f"💾 Cache aggiornata per {card_event.uid_formatted} - ricontrollo cache...")
+                            
+                            # Riprova validazione cache dopo refresh
+                            refreshed_result = await self.sync_manager.validate_card_offline(
+                                card_event.uid_formatted, 
+                                card_event.direction
+                            )
+                            
+                            if refreshed_result['authorized']:
+                                print(f"✅ Cache ora autorizza {card_event.uid_formatted} - procede con MQTT normale")
+                                sync_result = refreshed_result  # Cache ora OK
+                                
+                                # IMPORTANTE: Ora che cache è OK, il workflow continua normalmente
+                                # con invio MQTT → broker chiama gate-verification → decisione finale
+                                if self.config.system.bidirectional_mode:
+                                    await self.sync_manager.update_user_direction(
+                                        card_uid=card_event.uid_formatted,
+                                        direction=card_event.direction,
+                                        tornello_id=self.config.system.tornello_id,
+                                        customer_id=sync_result.get('customer_id')
+                                    )
+                            else:
+                                print(f"❌ Cache ancora nega {card_event.uid_formatted} dopo refresh")
+                        else:
+                            print(f"📭 Cache refresh per {card_event.uid_formatted} non ha trovato aggiornamenti")
+                            
+                    except Exception as e:
+                        print(f"⚠️ Errore durante cache refresh per {card_event.uid_formatted}: {e}")
+                        # Continua con logica normale (cache check failed)
+                
+                # A questo punto sync_result contiene validazione cache (aggiornata o originale)
+                if sync_result['authorized']:
+                    # ✅ ACCESSO AUTORIZZATO
+                    
+                    # 🎯 LOGGING SEPARATO: Due flussi distinti
                     
                     # 1. Log LOCALE sempre salvato (per download/backup)
                     if getattr(self.config.mqtt, 'always_log_locally', True):
@@ -599,7 +648,7 @@ class AccessControlSystem:
                         await self.sync_manager._sync_logs()
                         print(f"📤 Log sync forzato al server per: {card_event.uid_formatted}")
                     else:
-                        print(f"� Log sync saltato - MQTT OK per: {card_event.uid_formatted}")
+                        print(f"📋 Log sync saltato - MQTT OK per: {card_event.uid_formatted}")
                     
                     return AccessDecision.GRANT
                 
