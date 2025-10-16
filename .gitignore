@@ -29,6 +29,20 @@ MANIFEST
 .tox/
 .nox/
 .coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# 📊 Development Tools
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.black/
+.isort.cfg
+.coverage
 .coverage.*
 .cache
 nosetests.xml

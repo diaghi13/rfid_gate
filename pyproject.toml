@@ -1,0 +1,199 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rfid-gate"
+version = "2.0.0"
+description = "Sistema modulare per controllo accessi con lettori RFID"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "David Donghi", email = "david.donghi@example.com" }
+]
+keywords = ["rfid", "access-control", "raspberry-pi", "iot", "mqtt"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10", 
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Hardware",
+    "Topic :: Security",
+    "Topic :: Home Automation",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "mfrc522>=0.0.7",
+    "RPi.GPIO>=0.7.1", 
+    "spidev>=3.5",
+    "adafruit-circuitpython-pn532>=2.4.5",
+    "adafruit-blinka>=8.20.0",
+    "pyserial>=3.5",
+    "paho-mqtt>=1.6.1",
+    "requests>=2.28.0",
+    "aiohttp>=3.8.0",
+    "python-dotenv>=1.0.0",
+    "psutil>=5.9.0",
+    "packaging>=21.0",
+    "coloredlogs>=15.0.1",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+docs = [
+    "sphinx>=7.1.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "myst-parser>=2.0.0",
+]
+webui = [
+    "fastapi[all]>=0.100.0",
+    "jinja2>=3.1.2",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "websockets>=11.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/diaghi13/rfid_gate"
+Repository = "https://github.com/diaghi13/rfid_gate"
+Documentation = "https://github.com/diaghi13/rfid_gate/blob/main/docs/"
+Changelog = "https://github.com/diaghi13/rfid_gate/blob/main/CHANGELOG.md"
+"Bug Reports" = "https://github.com/diaghi13/rfid_gate/issues"
+
+[project.scripts]
+rfid-gate = "rfid_gate.__main__:main"
+rfid-diagnostic = "rfid_gate.tools.diagnostic:main"
+
+[tool.setuptools.packages.find]
+include = ["rfid_gate*"]
+
+[tool.setuptools.package-data]
+rfid_gate = ["*.yaml", "*.json", "*.txt"]
+
+# ========================================
+# 🔧 TOOL CONFIGURATIONS
+# ========================================
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["rfid_gate"]
+known_third_party = ["pytest", "paho", "RPi", "mfrc522"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "RPi.*",
+    "mfrc522.*",
+    "adafruit_pn532.*",
+    "board.*",
+    "busio.*",
+    "digitalio.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=rfid_gate",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "hardware: marks tests that require hardware",
+    "mqtt: marks tests that require MQTT broker",
+    "network: marks tests that require network connectivity",
+]
+
+[tool.coverage.run]
+source = ["rfid_gate"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "E266", "E501", "W503"]
+max-complexity = 10
+select = ["B", "C", "E", "F", "W", "T4", "B9"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist"]
+skips = ["B101", "B601"]  # Skip assert and shell usage warnings
