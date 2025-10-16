@@ -47,7 +47,7 @@ def patch_relay_activate_method():
             try:
                 # 1. ATTIVA RELAY IMMEDIATAMENTE
                 print(f"🔛 {self.relay_id}: Tentativo attivazione (target_state=True, active_low={self.active_low})")
-                success = self._sync_hardware_set_state(not self.active_low)  # True = ON
+                success = self._sync_hardware_set_state(True)  # True = ON (relay attivo)
                 if not success:
                     print(f"❌ {self.relay_id}: Fallimento attivazione hardware")
                     if hasattr(self, 'stats'):
@@ -74,7 +74,7 @@ def patch_relay_activate_method():
                 # 3. DISATTIVA RELAY AUTOMATICAMENTE
                 print(f"⏰ {self.relay_id}: Timer completato dopo {actual_duration:.2f}s - Disattivazione...")
                 print(f"🔛 {self.relay_id}: Tentativo disattivazione (target_state=False)")
-                success = self._sync_hardware_set_state(self.active_low)  # False = OFF
+                success = self._sync_hardware_set_state(False)  # False = OFF (relay spento)
                 if not success:
                     print(f"❌ {self.relay_id}: Fallimento disattivazione hardware")
                     if hasattr(self, 'stats'):
@@ -106,7 +106,7 @@ def patch_relay_activate_method():
                 # Emergency shutdown
                 try:
                     print(f"🔧 {self.relay_id}: Tentativo spegnimento di emergenza...")
-                    self._sync_hardware_set_state(self.active_low)  # Force OFF
+                    self._sync_hardware_set_state(False)  # Force OFF (relay spento)
                     print(f"✅ {self.relay_id}: Spegnimento di emergenza completato")
                 except Exception as emergency_e:
                     print(f"💥 {self.relay_id}: ERRORE anche nello spegnimento di emergenza: {emergency_e}")
