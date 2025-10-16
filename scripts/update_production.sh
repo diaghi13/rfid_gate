@@ -170,7 +170,7 @@ update_production() {
     cd "$REPO_DIR"
     
     # Lista file da aggiornare (escludendo quelli protetti)
-    echo -e "${BLUE}📋 File che verranno aggiornati:${NC}"
+    echo -e "${BLUE}📋 File che verranno aggiornati (preservando configurazioni):${NC}"
     
     # Aggiorna codice core
     echo "  🔧 Aggiornamento moduli core..."
@@ -232,12 +232,30 @@ update_production() {
         echo "  ✅ scripts/"
     fi
     
+    # ⚠️ CRITICO: NON toccare questi file/directory - sono preservati automaticamente:
+    # - .env (configurazione principale)
+    # - logs/ (cronologia accessi) 
+    # - cache/ (database locale)
+    # - config/ (configurazioni personalizzate)
+    # - backups/ (backup precedenti)
+    # - webui/uploads/ (già gestito sopra)
+    # - webui/sessions/ (sessioni attive)
+    
+    echo -e "${GREEN}🛡️ File critici preservati automaticamente:${NC}"
+    echo "  ✅ .env (non toccato)"
+    echo "  ✅ logs/ (non toccato)" 
+    echo "  ✅ cache/ (non toccato)"
+    echo "  ✅ config/ (non toccato)"
+    echo "  ✅ backups/ (non toccato)"
+    echo "  ✅ webui/uploads/ (preservato)"
+    echo "  ✅ webui/sessions/ (non toccato)"
+    
     # Ripristina permessi
     sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROD_DIR"
     sudo chmod +x "$PROD_DIR/scripts"/*.sh 2>/dev/null || true
     sudo chmod +x "$PROD_DIR/tools"/*.py 2>/dev/null || true
     
-    echo -e "${GREEN}✅ File di produzione aggiornati${NC}"
+    echo -e "${GREEN}✅ File di produzione aggiornati (configurazioni preservate)${NC}"
 }
 
 # Funzione per aggiornamento dipendenze
@@ -355,14 +373,39 @@ main() {
             echo -e "${GREEN}✅ Servizio riavviato correttamente${NC}"
         else
             echo -e "${RED}❌ ERRORE nel riavvio servizio!${NC}"
-            echo -e "${YELLOW}🔄 Ripristino backup...${NC}"
+            echo -e "${YELLOW}🔄 Ripristino backup completo...${NC}"
             
-            # Ripristina backup critico
-            sudo cp "$BACKUP_DIR/.env" "$PROD_DIR/" 2>/dev/null || true
+            # Ripristina backup critico completo
+            if [[ -f "$BACKUP_DIR/.env" ]]; then
+                sudo cp "$BACKUP_DIR/.env" "$PROD_DIR/" 2>/dev/null || true
+                echo "  ✅ Ripristinato .env"
+            fi
+            
+            if [[ -d "$BACKUP_DIR/logs" ]]; then
+                sudo rm -rf "$PROD_DIR/logs" 2>/dev/null || true
+                sudo cp -r "$BACKUP_DIR/logs" "$PROD_DIR/" 2>/dev/null || true
+                echo "  ✅ Ripristinati logs"
+            fi
+            
+            if [[ -d "$BACKUP_DIR/cache" ]]; then
+                sudo rm -rf "$PROD_DIR/cache" 2>/dev/null || true
+                sudo cp -r "$BACKUP_DIR/cache" "$PROD_DIR/" 2>/dev/null || true
+                echo "  ✅ Ripristinata cache"
+            fi
+            
+            if [[ -d "$BACKUP_DIR/config" ]]; then
+                sudo rm -rf "$PROD_DIR/config" 2>/dev/null || true
+                sudo cp -r "$BACKUP_DIR/config" "$PROD_DIR/" 2>/dev/null || true
+                echo "  ✅ Ripristinate configurazioni"
+            fi
+            
+            # Ripristina permessi
+            sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROD_DIR"
             
             echo -e "${BLUE}📋 Controlla i log e riprova manualmente:${NC}"
             echo "  sudo systemctl status $SERVICE_NAME"
             echo "  sudo journalctl -u $SERVICE_NAME -f"
+            echo "  Backup disponibile in: $BACKUP_DIR"
             exit 1
         fi
     else
