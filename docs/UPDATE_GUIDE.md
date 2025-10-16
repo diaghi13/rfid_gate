@@ -3,10 +3,12 @@
 ## 🏗️ Due Tipi di Installazione
 
 ### � Repository di Sviluppo (`~/rfid-gate`)
+
 - Per sviluppo, test e pull degli aggiornamenti
 - Usa: `./scripts/update_safe.sh`
 
 ### 🏭 Installazione Produzione (`/opt/rfid-gate`)
+
 - Sistema installato con servizio systemd e virtual environment
 - Usa: `./scripts/update_production.sh`
 
@@ -22,14 +24,43 @@ cd ~/rfid-gate
 ```
 
 **Cosa fa lo script:**
+
 - ✅ Aggiorna repository locale (`~/rfid-gate`)
-- ✅ Backup completo configurazioni e dati
+- ✅ **Backup COMPLETO sistema** (codice + configurazioni + dati)
 - ✅ Stop sicuro del servizio systemd
 - ✅ Aggiornamento file produzione in `/opt/rfid-gate`
+- ✅ **Preservazione automatica** configurazioni e dati locali
 - ✅ Aggiornamento dipendenze nel venv
 - ✅ Test post-aggiornamento
 - ✅ Riavvio automatico servizio
-- ✅ Rollback in caso di errori
+- ✅ **Rollback COMPLETO** in caso di errori (codice + dati)
+
+## 🔄 Sistema Backup e Ripristino
+
+### 💾 Backup Automatico Completo
+Lo script crea un backup completo che include:
+- 🗂️ **Codice sorgente** (`rfid_gate/`, `main.py`, `webui/`, `tools/`)
+- ⚙️ **Configurazioni** (`.env`, `config/`)
+- 📊 **Dati operativi** (`logs/`, `cache/`)
+- 📁 **File utenti** (`webui/uploads/`)
+
+### 🔄 Due Tipi di Ripristino
+
+#### 1. 🛡️ **Ripristino Automatico** (in caso di errore)
+Se l'aggiornamento fallisce, lo script ripristina **automaticamente**:
+- ✅ Tutto il codice sorgente alla versione precedente
+- ✅ Tutte le configurazioni e dati
+- ✅ Sistema identico a prima dell'aggiornamento
+
+#### 2. 🛠️ **Ripristino Manuale** (comando dedicato)
+```bash
+./scripts/restore_backup.sh /opt/rfid-gate/backups/production_update_YYYYMMDD_HHMMSS
+```
+
+**Quando usarlo:**
+- Corruzione sistema dopo giorni/settimane
+- Problemi non legati all'aggiornamento
+- Ripristino a una versione specifica del passato
 
 ---
 
@@ -42,8 +73,9 @@ cd ~/rfid-gate
 ```
 
 **Cosa fa lo script:**
+
 - ✅ Verifica prerequisiti e connessione
-- ✅ Backup automatico dei file critici  
+- ✅ Backup automatico dei file critici
 - ✅ Anteprima delle modifiche
 - ✅ Aggiornamento sicuro con conferma
 - ✅ Verifica integrità post-aggiornamento
@@ -61,7 +93,7 @@ cd ~/rfid-gate
 ├── scripts/update_production.sh # Script aggiornamento
 └── ...
 
-📁 /opt/rfid-gate/              # Installazione produzione  
+📁 /opt/rfid-gate/              # Installazione produzione
 ├── venv/                       # Virtual environment Python
 ├── main.py                     # File produzione
 ├── rfid_gate/                  # Moduli installati
@@ -73,6 +105,7 @@ cd ~/rfid-gate
 ```
 
 **🎯 Flusso Aggiornamento Raspberry:**
+
 1. **Repository**: Pull aggiornamenti in `~/rfid-gate`
 2. **Produzione**: Copia codice da repository a `/opt/rfid-gate`
 3. **Preservazione**: Mantiene `.env`, logs, cache, configurazioni
@@ -83,12 +116,14 @@ cd ~/rfid-gate
 ## 🛠️ Metodo Manuale
 
 ### 1. Verifica stato attuale
+
 ```bash
 git status
 git branch --show-current
 ```
 
 ### 2. Backup preventivo (opzionale ma consigliato)
+
 ```bash
 mkdir -p backups/manual_update_$(date +%Y%m%d_%H%M%S)
 cp .env backups/manual_update_$(date +%Y%m%d_%H%M%S)/
@@ -97,12 +132,14 @@ cp -r cache backups/manual_update_$(date +%Y%m%d_%H%M%S)/
 ```
 
 ### 3. Scarica aggiornamenti
+
 ```bash
 git fetch origin
 git pull origin $(git branch --show-current)
 ```
 
 ### 4. Aggiorna dipendenze (se necessario)
+
 ```bash
 pip install -r requirements.txt --upgrade
 ```
@@ -114,11 +151,13 @@ pip install -r requirements.txt --upgrade
 Il sistema è configurato per **NON toccare MAI** questi file durante un pull:
 
 ### 📄 Configurazione
+
 - ✅ `.env` - Le tue credenziali e configurazioni
 - ✅ `config/` - Configurazioni personalizzate
 - ✅ `backups/config/` - Backup configurazioni
 
-### 📊 Dati Operativi  
+### 📊 Dati Operativi
+
 - ✅ `logs/` - Tutti i log di accesso e sistema
   - `access_log.json` - Log accessi RFID
   - `access_log.csv` - Export CSV
@@ -126,16 +165,19 @@ Il sistema è configurato per **NON toccare MAI** questi file durante un pull:
   - `offline_queue.json` - Coda offline
 
 ### 💾 Cache e Database
+
 - ✅ `cache/` - Cache sincronizzazione
   - `local_cache.db` - Database cache locale
 - ✅ `*.db`, `*.sqlite` - Tutti i database
 
 ### 🌐 WebUI
+
 - ✅ `webui/uploads/` - Upload utenti
 - ✅ `webui/sessions/` - Sessioni attive
 - ✅ `webui/*.pid` - File di processo
 
 ### 🔐 Sicurezza
+
 - ✅ `*.pem`, `*.key`, `*.crt` - Certificati SSL
 - ✅ `secrets/`, `credentials/` - Credenziali
 
@@ -144,19 +186,23 @@ Il sistema è configurato per **NON toccare MAI** questi file durante un pull:
 ## 🎯 Cosa Viene Aggiornato
 
 ### ✅ Codice Sorgente
+
 - `rfid_gate/` - Moduli core sistema
 - `main.py` - Entry point principale
 - `webui/` - Interfaccia web (esclusi uploads/sessions)
 
 ### ✅ Script e Utilities
+
 - `scripts/` - Script di gestione
 - `tools/` - Utilità diagnostiche
 
 ### ✅ Documentazione
+
 - `README.md`, `docs/` - Documentazione
 - `*.md` - File documentazione
 
 ### ✅ Configurazione Sviluppo
+
 - `requirements.txt` - Dipendenze Python
 - `.gitignore` - Regole Git
 - `tests/` - Test suite
@@ -166,6 +212,7 @@ Il sistema è configurato per **NON toccare MAI** questi file durante un pull:
 ## 🚨 Cosa Fare in Caso di Problemi
 
 ### Se il pull fallisce per conflitti:
+
 ```bash
 # Salva le tue modifiche
 git stash
@@ -178,6 +225,7 @@ git stash pop
 ```
 
 ### Se qualcosa va storto:
+
 ```bash
 # Torna al commit precedente
 git reset --hard HEAD~1
@@ -188,6 +236,7 @@ cp -r backups/manual_update_YYYYMMDD_HHMMSS/logs .
 ```
 
 ### Verifica integrità post-aggiornamento:
+
 ```bash
 # Controlla file critici
 ls -la .env logs/ cache/

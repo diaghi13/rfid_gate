@@ -75,6 +75,14 @@ create_backup() {
     
     sudo mkdir -p "$BACKUP_DIR"
     
+    # Backup COMPLETO - incluso codice sorgente per ripristino totale
+    echo "  🗂️ Backup codice sorgente..."
+    sudo cp -r "$PROD_DIR/rfid_gate" "$BACKUP_DIR/" 2>/dev/null || true
+    sudo cp "$PROD_DIR/main.py" "$BACKUP_DIR/" 2>/dev/null || true
+    sudo cp -r "$PROD_DIR/webui" "$BACKUP_DIR/" 2>/dev/null || true
+    sudo cp -r "$PROD_DIR/tools" "$BACKUP_DIR/" 2>/dev/null || true
+    echo "  ✅ Codice sorgente → $BACKUP_DIR/"
+    
     # Backup file di configurazione
     if [[ -f "$PROD_DIR/.env" ]]; then
         sudo cp "$PROD_DIR/.env" "$BACKUP_DIR/.env"
@@ -105,7 +113,78 @@ create_backup() {
         echo "  ✅ webui/uploads/ → $BACKUP_DIR/"
     fi
     
-    echo -e "${GREEN}✅ Backup completato: $BACKUP_DIR${NC}"
+    echo -e "${GREEN}✅ Backup completo: $BACKUP_DIR${NC}"
+}
+
+# Funzione per ripristino completo sistema
+restore_complete_backup() {
+    echo -e "${RED}🔄 RIPRISTINO COMPLETO dal backup...${NC}"
+    
+    # Ripristina codice sorgente
+    if [[ -d "$BACKUP_DIR/rfid_gate" ]]; then
+        sudo rm -rf "$PROD_DIR/rfid_gate" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/rfid_gate" "$PROD_DIR/"
+        echo "  ✅ Ripristinato rfid_gate/"
+    fi
+    
+    if [[ -f "$BACKUP_DIR/main.py" ]]; then
+        sudo cp "$BACKUP_DIR/main.py" "$PROD_DIR/"
+        echo "  ✅ Ripristinato main.py"
+    fi
+    
+    if [[ -d "$BACKUP_DIR/webui" ]]; then
+        # Preserva uploads attuali se esistono
+        if [[ -d "$PROD_DIR/webui/uploads" ]]; then
+            sudo mv "$PROD_DIR/webui/uploads" "/tmp/current_uploads_backup" 2>/dev/null || true
+        fi
+        
+        sudo rm -rf "$PROD_DIR/webui" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/webui" "$PROD_DIR/"
+        
+        # Ripristina uploads attuali
+        if [[ -d "/tmp/current_uploads_backup" ]]; then
+            sudo rm -rf "$PROD_DIR/webui/uploads" 2>/dev/null || true
+            sudo mv "/tmp/current_uploads_backup" "$PROD_DIR/webui/uploads"
+        fi
+        echo "  ✅ Ripristinato webui/ (uploads preservati)"
+    fi
+    
+    if [[ -d "$BACKUP_DIR/tools" ]]; then
+        sudo rm -rf "$PROD_DIR/tools" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/tools" "$PROD_DIR/"
+        echo "  ✅ Ripristinato tools/"
+    fi
+    
+    # Ripristina configurazioni e dati
+    if [[ -f "$BACKUP_DIR/.env" ]]; then
+        sudo cp "$BACKUP_DIR/.env" "$PROD_DIR/" 2>/dev/null || true
+        echo "  ✅ Ripristinato .env"
+    fi
+    
+    if [[ -d "$BACKUP_DIR/logs" ]]; then
+        sudo rm -rf "$PROD_DIR/logs" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/logs" "$PROD_DIR/" 2>/dev/null || true
+        echo "  ✅ Ripristinati logs"
+    fi
+    
+    if [[ -d "$BACKUP_DIR/cache" ]]; then
+        sudo rm -rf "$PROD_DIR/cache" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/cache" "$PROD_DIR/" 2>/dev/null || true
+        echo "  ✅ Ripristinata cache"
+    fi
+    
+    if [[ -d "$BACKUP_DIR/config" ]]; then
+        sudo rm -rf "$PROD_DIR/config" 2>/dev/null || true
+        sudo cp -r "$BACKUP_DIR/config" "$PROD_DIR/" 2>/dev/null || true
+        echo "  ✅ Ripristinate configurazioni"
+    fi
+    
+    # Ripristina permessi
+    sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROD_DIR"
+    sudo chmod +x "$PROD_DIR/scripts"/*.sh 2>/dev/null || true
+    sudo chmod +x "$PROD_DIR/tools"/*.py 2>/dev/null || true
+    
+    echo -e "${GREEN}✅ Sistema completamente ripristinato alla versione precedente${NC}"
 }
 
 # Funzione per aggiornamento repository
@@ -373,39 +452,18 @@ main() {
             echo -e "${GREEN}✅ Servizio riavviato correttamente${NC}"
         else
             echo -e "${RED}❌ ERRORE nel riavvio servizio!${NC}"
-            echo -e "${YELLOW}🔄 Ripristino backup completo...${NC}"
+            echo -e "${YELLOW}🔄 RIPRISTINO COMPLETO DEL SISTEMA...${NC}"
             
-            # Ripristina backup critico completo
-            if [[ -f "$BACKUP_DIR/.env" ]]; then
-                sudo cp "$BACKUP_DIR/.env" "$PROD_DIR/" 2>/dev/null || true
-                echo "  ✅ Ripristinato .env"
-            fi
+            # Usa la funzione di ripristino completo
+            restore_complete_backup
             
-            if [[ -d "$BACKUP_DIR/logs" ]]; then
-                sudo rm -rf "$PROD_DIR/logs" 2>/dev/null || true
-                sudo cp -r "$BACKUP_DIR/logs" "$PROD_DIR/" 2>/dev/null || true
-                echo "  ✅ Ripristinati logs"
-            fi
-            
-            if [[ -d "$BACKUP_DIR/cache" ]]; then
-                sudo rm -rf "$PROD_DIR/cache" 2>/dev/null || true
-                sudo cp -r "$BACKUP_DIR/cache" "$PROD_DIR/" 2>/dev/null || true
-                echo "  ✅ Ripristinata cache"
-            fi
-            
-            if [[ -d "$BACKUP_DIR/config" ]]; then
-                sudo rm -rf "$PROD_DIR/config" 2>/dev/null || true
-                sudo cp -r "$BACKUP_DIR/config" "$PROD_DIR/" 2>/dev/null || true
-                echo "  ✅ Ripristinate configurazioni"
-            fi
-            
-            # Ripristina permessi
-            sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROD_DIR"
-            
-            echo -e "${BLUE}📋 Controlla i log e riprova manualmente:${NC}"
+            echo -e "${BLUE}📋 Sistema ripristinato alla versione precedente${NC}"
+            echo -e "${YELLOW}� Comandi per diagnosi:${NC}"
             echo "  sudo systemctl status $SERVICE_NAME"
             echo "  sudo journalctl -u $SERVICE_NAME -f"
-            echo "  Backup disponibile in: $BACKUP_DIR"
+            echo "  Backup completo disponibile in: $BACKUP_DIR"
+            echo ""
+            echo -e "${RED}⚠️ AGGIORNAMENTO FALLITO - Sistema ripristinato${NC}"
             exit 1
         fi
     else
