@@ -543,6 +543,48 @@ class AccessControlSystem:
             print(f"🎯 Flusso intelligente per carta: {card_event.uid_formatted}")
             
             # ============================================================================
+            # 🚪 USCITA SEMPLIFICATA - Logica diversa per OUT
+            # ============================================================================
+            if card_event.direction == "out":
+                print(f"🚪 USCITA: Flusso semplificato per {card_event.uid_formatted}")
+                
+                # USCITE SEMPRE AUTORIZZATE - NO controlli bidirezionali, NO validazioni abbonamenti
+                # Risolve scenario: staff fa entrare cliente con sua whitelist, cliente può uscire con sua card
+                print(f"✅ USCITA: Sempre autorizzata per {card_event.uid_formatted}")
+                print("   → Nessuna validazione abbonamento")
+                print("   → Nessun controllo bidirezionale") 
+                print("   → Scenario supportato: cliente entra con staff, esce con sua card")
+                
+                # Aggiorna stato bidirezionale per uscita (se abilitato)
+                # Nota: impostiamo sempre "out" indipendentemente dallo stato precedente
+                if self.config.system.bidirectional_mode and self.sync_manager:
+                    await self.sync_manager.update_user_direction(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        tornello_id=self.config.system.tornello_id,
+                        customer_id="EXIT_FLOW"  # Marker per uscite semplificate
+                    )
+                
+                # Log uscita (senza richiedere dati abbonamento)
+                await self.sync_manager.log_access(
+                    card_uid=card_event.uid_formatted,
+                    direction=card_event.direction,
+                    result="authorized",
+                    reason="Uscita autorizzata - nessuna validazione abbonamento richiesta",
+                    customer_id="EXIT_FLOW",
+                    customer_name="Utente in uscita",
+                    reader_type=card_event.reader_type,
+                    metadata=card_event.metadata
+                )
+                
+                return AccessDecision.GRANT
+            
+            # ============================================================================  
+            # 🚪 ENTRATA - Logica completa per IN (validazioni + whitelist + controlli)
+            # ============================================================================
+            print(f"🚪 ENTRATA: Flusso completo per {card_event.uid_formatted}")
+            
+            # ============================================================================
             # � CONTROLLO BIDIREZIONALE (se abilitato) - PRIMA PRIORITÀ
             # ============================================================================
             # ============================================================================
