@@ -543,13 +543,26 @@ class AccessControlSystem:
             print(f"🎯 Flusso intelligente per carta: {card_event.uid_formatted}")
             
             # ============================================================================
-            # 🔐 WHITELIST CHECK - Priorità assoluta (bypass tutto)
+            # � CONTROLLO BIDIREZIONALE (se abilitato) - PRIMA PRIORITÀ
+            # ============================================================================
+            # ============================================================================
+            # 🔐 WHITELIST CHECK - PRIORITÀ MASSIMA (bypass controlli bidirezionali)
             # ============================================================================
             if self.sync_manager and self.config.sync.enabled:
                 # Controlla se la carta è in whitelist
                 whitelist_result = await self._check_whitelist_access(card_event)
                 if whitelist_result['authorized']:
-                    print(f"🔓 WHITELIST: Accesso garantito per {card_event.uid_formatted}")
+                    print(f"🔓 WHITELIST: Accesso libero per {card_event.uid_formatted} (bypass controlli bidirezionali)")
+                    
+                    # WHITELIST: Aggiorna stato ma NON fa controlli preventivi 
+                    # (operatori possono entrare/uscire liberamente)
+                    if self.config.system.bidirectional_mode:
+                        await self.sync_manager.update_user_direction(
+                            card_uid=card_event.uid_formatted,
+                            direction=card_event.direction,
+                            tornello_id=self.config.system.tornello_id,
+                            customer_id=whitelist_result.get('customer_id')
+                        )
                     
                     # Log immediato whitelist
                     await self.sync_manager.log_access(
@@ -569,9 +582,9 @@ class AccessControlSystem:
                         await self._send_parallel_mqtt_logging(card_event)
                     
                     return AccessDecision.GRANT
-            
+                    
             # ============================================================================
-            # 🔄 CONTROLLO BIDIREZIONALE (se abilitato)
+            # 🔄 CONTROLLO BIDIREZIONALE (solo per carte NON-whitelist)
             # ============================================================================
             if self.config.system.bidirectional_mode and self.sync_manager:
                 bidirectional_check = await self.sync_manager.check_bidirectional_access(
@@ -744,6 +757,14 @@ class AccessControlSystem:
                 card_event.uid_formatted, 
                 card_event.direction
             )
+            
+            # Verifica che cache_result non sia None
+            if not cache_result:
+                return {
+                    'authorized': False,
+                    'reason': 'Carta non trovata - non in whitelist',
+                    'source': 'whitelist_check'
+                }
             
             # Controlla se è whitelist dalla subscription_info
             subscription_info = cache_result.get('subscription_info', {})
