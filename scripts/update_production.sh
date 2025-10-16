@@ -21,6 +21,12 @@ SERVICE_NAME="rfid-gate"
 SERVICE_USER="rfid"
 BACKUP_DIR="/opt/rfid-gate/backups/production_update_$(date +%Y%m%d_%H%M%S)"
 
+# Configurazione pulizia automatica backup (opzionale)
+AUTO_CLEANUP_ENABLED=${AUTO_CLEANUP_ENABLED:-true}    # Abilita pulizia automatica
+BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}   # Mantieni backup per 30 giorni
+BACKUP_MIN_KEEP=${BACKUP_MIN_KEEP:-5}                # Mantieni sempre almeno 5 backup
+BACKUP_MAX_KEEP=${BACKUP_MAX_KEEP:-20}               # Mantieni al massimo 20 backup
+
 # Colori per output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -185,6 +191,35 @@ restore_complete_backup() {
     sudo chmod +x "$PROD_DIR/tools"/*.py 2>/dev/null || true
     
     echo -e "${GREEN}✅ Sistema completamente ripristinato alla versione precedente${NC}"
+}
+
+# Funzione per pulizia automatica backup obsoleti
+cleanup_old_backups() {
+    if [[ "$AUTO_CLEANUP_ENABLED" != "true" ]]; then
+        return 0
+    fi
+    
+    echo -e "${YELLOW}🧹 Pulizia automatica backup obsoleti...${NC}"
+    
+    # Verifica se lo script di pulizia esiste
+    CLEANUP_SCRIPT="$PROD_DIR/scripts/cleanup_backups.sh"
+    if [[ ! -f "$CLEANUP_SCRIPT" ]]; then
+        echo -e "${BLUE}ℹ️ Script pulizia non trovato, salto pulizia automatica${NC}"
+        return 0
+    fi
+    
+    # Esegui pulizia automatica in modalità silenziosa
+    if "$CLEANUP_SCRIPT" \
+        --days "$BACKUP_RETENTION_DAYS" \
+        --min-keep "$BACKUP_MIN_KEEP" \
+        --max-keep "$BACKUP_MAX_KEEP" \
+        --quiet \
+        --force 2>/dev/null; then
+        
+        echo -e "${GREEN}✅ Pulizia automatica completata${NC}"
+    else
+        echo -e "${YELLOW}⚠️ Pulizia automatica fallita (non critico)${NC}"
+    fi
 }
 
 # Funzione per aggiornamento repository
@@ -470,7 +505,10 @@ main() {
         echo -e "${BLUE}ℹ️ Servizio era già fermo, non riavviato automaticamente${NC}"
     fi
     
-    # 10. Riepilogo finale
+    # 10. Pulizia automatica backup obsoleti (se abilitata)
+    cleanup_old_backups
+    
+    # 11. Riepilogo finale
     echo ""
     echo -e "${GREEN}"
     echo "=================================================="
@@ -482,12 +520,27 @@ main() {
     echo "  🏭 Produzione: $PROD_DIR (aggiornata)"
     echo "  💾 Backup: $BACKUP_DIR"
     echo "  🔄 Servizio: $(sudo systemctl is-active $SERVICE_NAME)"
+    
+    # Mostra stato pulizia automatica
+    if [[ "$AUTO_CLEANUP_ENABLED" == "true" ]]; then
+        echo "  🧹 Pulizia automatica: abilitata ($BACKUP_RETENTION_DAYS giorni, min:$BACKUP_MIN_KEEP, max:$BACKUP_MAX_KEEP)"
+    else
+        echo "  🧹 Pulizia automatica: disabilitata"
+    fi
     echo ""
     echo -e "${YELLOW}🔗 Comandi utili post-aggiornamento:${NC}"
     echo "  📊 Stato servizio: sudo systemctl status $SERVICE_NAME"
     echo "  📋 Log sistema: sudo journalctl -u $SERVICE_NAME -f"
     echo "  🌐 WebUI: http://$(hostname -I | awk '{print $1}'):8080"
     echo "  🛠️ Test manuale: cd $PROD_DIR && sudo -u $SERVICE_USER bash -c 'source venv/bin/activate && python main.py --test'"
+    echo ""
+    echo -e "${BLUE}🧹 Gestione backup:${NC}"
+    echo "  📋 Lista backup: ls -la $PROD_DIR/backups/"
+    echo "  🧹 Pulizia manuale: $PROD_DIR/scripts/cleanup_backups.sh --help"
+    echo "  🔄 Ripristino manuale: $PROD_DIR/scripts/restore_backup.sh /path/to/backup"
+    if [[ "$AUTO_CLEANUP_ENABLED" != "true" ]]; then
+        echo "  💡 Abilita pulizia automatica: export AUTO_CLEANUP_ENABLED=true"
+    fi
     echo ""
 }
 
