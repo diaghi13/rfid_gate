@@ -13,7 +13,7 @@ Modules:
     - logging: Sistema logging avanzato
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 from rfid_gate.core.access_control import AccessControlSystem
 from rfid_gate.config.settings import RFIDGateConfig
