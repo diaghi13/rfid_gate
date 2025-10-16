@@ -304,7 +304,7 @@ class BaseRelayController(ABC):
             start_time = time.time()
             
             # Attiva relè (sincrono diretto come nel legacy)
-            target_state = not self.active_low  # ON
+            target_state = True  # ON (relay attivo)
             print(f"🔛 {self.relay_id}: Tentativo attivazione (target_state={target_state}, active_low={self.active_low})")
             
             success = self._sync_hardware_set_state(target_state)
@@ -342,7 +342,7 @@ class BaseRelayController(ABC):
             # Disattiva relè
             with self._thread_lock:
                 if not self._stop_thread:
-                    target_state = self.active_low  # OFF
+                    target_state = False  # OFF (relay spento)
                     print(f"🔛 {self.relay_id}: Tentativo disattivazione (target_state={target_state})")
                     
                     success = self._sync_hardware_set_state(target_state)
@@ -376,7 +376,7 @@ class BaseRelayController(ABC):
                 # Spegni in caso di errore
                 try:
                     print(f"🔧 {self.relay_id}: Tentativo spegnimento di emergenza...")
-                    self._sync_hardware_set_state(self.active_low)
+                    self._sync_hardware_set_state(False)  # Force OFF (relay spento)
                     print(f"✅ {self.relay_id}: Spegnimento di emergenza completato")
                 except Exception as emergency_e:
                     print(f"💥 {self.relay_id}: ERRORE anche nello spegnimento di emergenza: {emergency_e}")
