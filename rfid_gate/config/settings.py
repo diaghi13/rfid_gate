@@ -227,10 +227,10 @@ class SyncConfig:
     max_retries: int = 3
     retry_delay: int = 5
     
-    # 🔥 NUOVI: Endpoint REST per validazione real-time (fallback quando carta non in cache)
-    fallback_server_url: str = "http://localhost:8000"  # Server per fallback
-    fallback_endpoint: str = "/api/gate-verification"    # Endpoint specifico
-    fallback_timeout: int = 3  # timeout in secondi per fallback real-time
+    # ✅ Cache Sync: per refresh dati carte (non autorizzazione)
+    cache_sync_server_url: str = "http://localhost:8000"  # Server per cache sync
+    cache_sync_endpoint: str = "/api/sync-gate"    # Endpoint per refresh cache (NON autorizzazione)
+    cache_sync_timeout: int = 3  # timeout in secondi per cache sync
     gate_id: str = "tornello_01"  # ID del tornello per identificazione
     
     # Legacy compatibility
@@ -378,13 +378,13 @@ class RFIDGateConfig:
             logs_endpoint=os.getenv('SYNC_LOGS_ENDPOINT', '/api/logs/bulk'),
             health_endpoint=os.getenv('SYNC_HEALTH_ENDPOINT', '/api/health'),
             updates_endpoint=os.getenv('SYNC_UPDATES_ENDPOINT', '/api/cards/updates'),
-            fallback_server_url=os.getenv('SYNC_FALLBACK_SERVER_URL', 'http://localhost:8000'),  # 🔥 NUOVO
-            fallback_endpoint=os.getenv('SYNC_FALLBACK_ENDPOINT', '/api/gate-verification'),      # 🔥 NUOVO
+            cache_sync_server_url=os.getenv('CACHE_SYNC_SERVER_URL', 'http://localhost:8000'),  # ✅ Cache refresh
+            cache_sync_endpoint=os.getenv('CACHE_SYNC_ENDPOINT', '/api/sync-gate'),      # ✅ Solo per cache
             daily_sync_time=os.getenv('SYNC_DAILY_TIME', '06:00'),
             updates_check_interval=int(os.getenv('SYNC_UPDATES_INTERVAL', 15)),
             logs_sync_interval=int(os.getenv('SYNC_LOGS_INTERVAL', 5)),
             connection_timeout=int(os.getenv('SYNC_CONNECTION_TIMEOUT', 30)),
-            fallback_timeout=int(os.getenv('SYNC_FALLBACK_TIMEOUT', 3)),  # 🔥 NUOVO
+            cache_sync_timeout=int(os.getenv('CACHE_SYNC_TIMEOUT', 3)),  # ✅ Cache timeout
             gate_id=os.getenv('SYNC_GATE_ID', 'tornello_01'),  # 🔥 NUOVO
             cache_db_path=os.getenv('SYNC_CACHE_DB_PATH', 'cache/local_cache.db'),
             max_pending_logs=int(os.getenv('SYNC_MAX_PENDING_LOGS', 1000)),

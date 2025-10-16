@@ -12,6 +12,7 @@ Sistema centrale di controllo accessi che coordina:
 """
 
 import asyncio
+import os
 import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
@@ -513,9 +514,49 @@ class AccessControlSystem:
             print(f"❌ Errore invio dati MQTT: {e}")
     
     async def _authenticate_card(self, card_event: CardEvent) -> AccessDecision:
-        """Autentica carta usando strategia offline-first con MQTT parallelo"""
+        """
+        🎯 NUOVO FLUSSO INTELLIGENTE - Cache First con MQTT Parallelo e Fallback Diretto
+        ================================================================================
+        
+        CASO 1: Carta in cache → Cache auth + MQTT parallelo
+        CASO 2: Carta NON in cache → Cache refresh → Se non trova: Fallback diretto (NO MQTT)
+        CASO 3: Carta scaduta → Cache refresh → Cache auth + MQTT parallelo  
+        WHITELIST: Sempre autorizzata con bypass IN/OUT
+        """
         try:
+            print(f"🎯 Flusso intelligente per carta: {card_event.uid_formatted}")
+            
+            # ============================================================================
+            # 🔐 WHITELIST CHECK - Priorità assoluta (bypass tutto)
+            # ============================================================================
+            if self.sync_manager and self.config.sync.enabled:
+                # Controlla se la carta è in whitelist
+                whitelist_result = await self._check_whitelist_access(card_event)
+                if whitelist_result['authorized']:
+                    print(f"🔓 WHITELIST: Accesso garantito per {card_event.uid_formatted}")
+                    
+                    # Log immediato whitelist
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result="authorized",
+                        reason=whitelist_result['reason'],
+                        customer_id=whitelist_result.get('customer_id'),
+                        customer_name=whitelist_result.get('customer_name'),
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
+                    
+                    # WHITELIST: MQTT parallelo solo per logging (non per autorizzazione)
+                    if (self.mode == SystemMode.ONLINE and self.config.auth.enabled and 
+                        self.mqtt_client and self.mqtt_client.is_connected()):
+                        await self._send_parallel_mqtt_logging(card_event)
+                    
+                    return AccessDecision.GRANT
+            
+            # ============================================================================
             # 🔄 CONTROLLO BIDIREZIONALE (se abilitato)
+            # ============================================================================
             if self.config.system.bidirectional_mode and self.sync_manager:
                 bidirectional_check = await self.sync_manager.check_bidirectional_access(
                     card_uid=card_event.uid_formatted,
@@ -524,203 +565,295 @@ class AccessControlSystem:
                 )
                 
                 if not bidirectional_check['valid']:
-                    # Log accesso negato per direzione non valida
-                    await self.sync_manager.log_access(
-                        card_uid=card_event.uid_formatted,
-                        direction=card_event.direction,
-                        result="denied",
-                        reason=f"Controllo bidirezionale: {bidirectional_check['reason']}",
-                        customer_id=None,  # Non abbiamo ancora fatto la validazione
-                        reader_type=card_event.reader_type,
-                        metadata=card_event.metadata
+                    await self._log_denied_access(
+                        card_event, 
+                        f"Controllo bidirezionale: {bidirectional_check['reason']}"
                     )
                     return AccessDecision.DENY
             
-            # 🚀 NUOVO FLUSSO PARALLELO NON-BLOCCANTE
-            mqtt_success = False
-            
-            # 1. Invia SEMPRE richiesta MQTT in parallelo (se online e MQTT abilitato)
-            if (self.mode == SystemMode.ONLINE and self.config.auth.enabled and 
-                self.mqtt_client and self.mqtt_client.is_connected() and
-                getattr(self.config.mqtt, 'parallel_auth', True)):
-                
-                # Crea auth request
-                auth_request = AuthRequest.from_card_event(
-                    card_event=card_event,
-                    tornello_id=self.config.system.tornello_id,
-                    auth_required=self.config.auth.enabled
-                )
-                
-                # Invia in modalità parallela (non-bloccante)
-                mqtt_success = await self.mqtt_client.send_auth_request_parallel(auth_request)
-                print(f"📡 MQTT parallelo {'✅ inviato' if mqtt_success else '⚠️ accodato/retry'}: {card_event.uid_formatted}")
-            
-            # 2. Procedi IMMEDIATAMENTE con autenticazione locale (priorità offline-first)
-            
-            # A. Prova prima con SyncManager (cache locale)
+            # ============================================================================
+            # 📱 CASO 1: Controlla Cache Locale
+            # ============================================================================
             if self.sync_manager and self.config.sync.enabled:
-                sync_result = await self.sync_manager.validate_card_offline(
+                cache_result = await self.sync_manager.validate_card_offline(
                     card_event.uid_formatted, 
                     card_event.direction
                 )
                 
-                if sync_result['authorized']:
-                    # ✅ ACCESSO AUTORIZZATO LOCALMENTE
+                if cache_result['authorized']:
+                    # ✅ CASO 1: Carta trovata e valida in cache
+                    print(f"✅ CASO 1: Carta {card_event.uid_formatted} autorizzata da cache")
+                    
+                    # Update bidirezionale se necessario
                     if self.config.system.bidirectional_mode:
                         await self.sync_manager.update_user_direction(
                             card_uid=card_event.uid_formatted,
                             direction=card_event.direction,
                             tornello_id=self.config.system.tornello_id,
-                            customer_id=sync_result.get('customer_id')
+                            customer_id=cache_result.get('customer_id')
                         )
+                    
+                    # Log immediato locale
+                    await self._log_authorized_access(card_event, cache_result)
+                    
+                    # MQTT parallelo per logging server
+                    if (self.mode == SystemMode.ONLINE and self.config.auth.enabled and 
+                        self.mqtt_client and self.mqtt_client.is_connected()):
+                        await self._send_parallel_mqtt_logging(card_event)
+                    
+                    return AccessDecision.GRANT
                 
-                elif not sync_result['authorized'] and self.mode == SystemMode.ONLINE:
-                    # 🔄 STRATEGIA REFRESH: Carta negata dalla cache, prova refresh da server
-                    # Questo gestisce il caso di abbonamenti rinnovati non ancora sincronizzati
-                    print(f"🔄 Carta {card_event.uid_formatted} negata dalla cache - tentativo refresh server...")
+                # ============================================================================
+                # 📱 CASO 2 & 3: Cache Miss o Scaduta - Prova Cache Refresh
+                # ============================================================================
+                elif self.mode == SystemMode.ONLINE:
+                    print(f"🔄 CASO 2/3: Cache miss/scaduta per {card_event.uid_formatted} - tentativo refresh")
                     
                     try:
-                        # Importa il cache refresh manager
-                        from cache_refresh_strategy import CacheRefreshManager
+                        from rfid_gate.network.cache_refresh_strategy import CacheRefreshManager
                         refresh_mgr = CacheRefreshManager(self.sync_manager)
                         
-                        # Prova refresh intelligente (SOLO aggiorna cache, non autorizza)
+                        # Cache refresh: GET /api/sync-gate
                         cache_updated = await refresh_mgr.handle_denied_card_refresh(card_event.uid_formatted)
                         
                         if cache_updated:
-                            print(f"💾 Cache aggiornata per {card_event.uid_formatted} - ricontrollo cache...")
+                            # Cache aggiornata - ricontrolla
+                            print(f"💾 Cache aggiornata per {card_event.uid_formatted} - ricontrollo...")
                             
-                            # Riprova validazione cache dopo refresh
                             refreshed_result = await self.sync_manager.validate_card_offline(
                                 card_event.uid_formatted, 
                                 card_event.direction
                             )
                             
                             if refreshed_result['authorized']:
-                                print(f"✅ Cache ora autorizza {card_event.uid_formatted} - procede con MQTT normale")
-                                sync_result = refreshed_result  # Cache ora OK
+                                # ✅ CASO 3: Cache refresh ha risolto (es. abbonamento rinnovato)
+                                print(f"✅ CASO 3: Cache refresh risolto per {card_event.uid_formatted}")
                                 
-                                # IMPORTANTE: Ora che cache è OK, il workflow continua normalmente
-                                # con invio MQTT → broker chiama gate-verification → decisione finale
+                                # Update bidirezionale
                                 if self.config.system.bidirectional_mode:
                                     await self.sync_manager.update_user_direction(
                                         card_uid=card_event.uid_formatted,
                                         direction=card_event.direction,
                                         tornello_id=self.config.system.tornello_id,
-                                        customer_id=sync_result.get('customer_id')
+                                        customer_id=refreshed_result.get('customer_id')
                                     )
-                            else:
-                                print(f"❌ Cache ancora nega {card_event.uid_formatted} dopo refresh")
+                                
+                                # Log immediato
+                                await self._log_authorized_access(card_event, refreshed_result)
+                                
+                                # MQTT parallelo per logging
+                                if (self.config.auth.enabled and self.mqtt_client and 
+                                    self.mqtt_client.is_connected()):
+                                    await self._send_parallel_mqtt_logging(card_event)
+                                
+                                return AccessDecision.GRANT
+                        
+                        # ============================================================================
+                        # 📱 CASO 2: Cache refresh non ha trovato la carta - FALLBACK DIRETTO
+                        # ============================================================================
+                        print(f"🔗 CASO 2: Fallback diretto gate-verification per {card_event.uid_formatted}")
+                        
+                        # Chiamata diretta /api/gate-verification (SENZA MQTT per evitare duplicati)
+                        direct_result = await self._direct_gate_verification(
+                            card_event.uid_formatted, 
+                            card_event.direction
+                        )
+                        
+                        if direct_result['authorized']:
+                            print(f"✅ FALLBACK: Gate-verification autorizza {card_event.uid_formatted}")
+                            
+                            # Log immediato fallback (NO MQTT parallelo per evitare duplicati)
+                            await self._log_authorized_access(card_event, direct_result, source="fallback")
+                            
+                            return AccessDecision.GRANT
                         else:
-                            print(f"📭 Cache refresh per {card_event.uid_formatted} non ha trovato aggiornamenti")
+                            print(f"❌ FALLBACK: Gate-verification nega {card_event.uid_formatted}")
+                            await self._log_denied_access(card_event, direct_result['reason'], source="fallback")
+                            return AccessDecision.DENY
                             
                     except Exception as e:
-                        print(f"⚠️ Errore durante cache refresh per {card_event.uid_formatted}: {e}")
-                        # Continua con logica normale (cache check failed)
+                        print(f"⚠️ Errore durante cache refresh/fallback per {card_event.uid_formatted}: {e}")
+                        # Continua con cache result originale
+                        await self._log_denied_access(card_event, cache_result['reason'])
+                        return AccessDecision.DENY
                 
-                # A questo punto sync_result contiene validazione cache (aggiornata o originale)
-                if sync_result['authorized']:
-                    # ✅ ACCESSO AUTORIZZATO
-                    
-                    # 🎯 LOGGING SEPARATO: Due flussi distinti
-                    
-                    # 1. Log LOCALE sempre salvato (per download/backup)
-                    if getattr(self.config.mqtt, 'always_log_locally', True):
-                        await self.sync_manager.log_access(
-                            card_uid=card_event.uid_formatted,
-                            direction=card_event.direction,
-                            result="authorized",
-                            reason=f"{sync_result['reason']} | Local",
-                            customer_id=sync_result.get('customer_id'),
-                            customer_name=sync_result.get('customer_name'),
-                            reader_type=card_event.reader_type,
-                            metadata=card_event.metadata
-                        )
-                    
-                    # 2. Log SYNC al server solo se MQTT fallisce
-                    should_sync_to_server = (
-                        not getattr(self.config.mqtt, 'sync_logs_only_on_mqtt_failure', True) or  
-                        not mqtt_success
-                    )
-                    
-                    if should_sync_to_server:
-                        # Forza sync di questo log specifico
-                        await self.sync_manager._sync_logs()
-                        print(f"📤 Log sync forzato al server per: {card_event.uid_formatted}")
-                    else:
-                        print(f"📋 Log sync saltato - MQTT OK per: {card_event.uid_formatted}")
-                    
-                    return AccessDecision.GRANT
-                
-                # Se non autorizzata dalla cache
+                # Modalità offline - usa solo cache
                 else:
-                    # � LOGGING SEPARATO per accesso negato
-                    
-                    # 1. Log LOCALE sempre salvato
-                    if getattr(self.config.mqtt, 'always_log_locally', True):
-                        await self.sync_manager.log_access(
-                            card_uid=card_event.uid_formatted,
-                            direction=card_event.direction,
-                            result="denied",
-                            reason=f"{sync_result['reason']} | Local",
-                            customer_id=sync_result.get('customer_id'),
-                            customer_name=sync_result.get('customer_name'),
-                            reader_type=card_event.reader_type,
-                            metadata=card_event.metadata
-                        )
-                    
-                    # 2. Sync al server solo se MQTT fallisce
-                    should_sync_to_server = (
-                        not getattr(self.config.mqtt, 'sync_logs_only_on_mqtt_failure', True) or  
-                        not mqtt_success
-                    )
-                    
-                    if should_sync_to_server:
-                        await self.sync_manager._sync_logs()
-                        print(f"📤 Log sync forzato al server per: {card_event.uid_formatted}")
-                    
+                    await self._log_denied_access(card_event, cache_result['reason'])
                     return AccessDecision.DENY
             
-            # B. Fallback offline mode (se non c'è SyncManager o se legacy)
+            # ============================================================================
+            # 💽 Fallback Offline Mode (legacy)
+            # ============================================================================
             elif self.mode == SystemMode.OFFLINE:
                 decision = self._offline_authentication(card_event.uid_formatted)
+                result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
+                reason = "Offline auth | Local"
                 
-                # 📝 LOGGING SEPARATO in modalità offline
                 if self.sync_manager:
-                    result_str = "authorized" if decision == AccessDecision.GRANT else "denied"
-                    
-                    # 1. Log LOCALE sempre salvato
-                    if getattr(self.config.mqtt, 'always_log_locally', True):
-                        await self.sync_manager.log_access(
-                            card_uid=card_event.uid_formatted,
-                            direction=card_event.direction,
-                            result=result_str,
-                            reason=f"Offline auth | Local",
-                            customer_id=None,
-                            reader_type=card_event.reader_type,
-                            metadata=card_event.metadata
-                        )
-                    
-                    # 2. Sync sempre necessario in modalità offline (MQTT non disponibile)
-                    # SyncManager gestirà automaticamente il retry quando torna online
-                    print(f"📦 Log accodato per sync futuro: {card_event.uid_formatted}")
+                    await self.sync_manager.log_access(
+                        card_uid=card_event.uid_formatted,
+                        direction=card_event.direction,
+                        result=result_str,
+                        reason=reason,
+                        customer_id=None,
+                        reader_type=card_event.reader_type,
+                        metadata=card_event.metadata
+                    )
                 
                 return decision
             
-            # C. Nessuna autenticazione disponibile
+            # Nessuna autenticazione disponibile
             else:
                 return AccessDecision.DENY
                 
         except Exception as e:
             print(f"❌ Errore autenticazione: {e}")
             return AccessDecision.ERROR
-            return AccessDecision.ERROR
+    
+    async def _check_whitelist_access(self, card_event: CardEvent) -> Dict[str, Any]:
+        """Controlla se la carta è in whitelist (accesso sempre autorizzato)"""
+        try:
+            # Usa la logica esistente di validate_card_offline ma controlla specificamente whitelist
+            cache_result = await self.sync_manager.validate_card_offline(
+                card_event.uid_formatted, 
+                card_event.direction
+            )
+            
+            # Controlla se è whitelist dalla subscription_info
+            subscription_info = cache_result.get('subscription_info', {})
+            is_whitelist = subscription_info.get('in_white_list', False) or subscription_info.get('type') == 'whitelist'
+            
+            if is_whitelist:
+                return {
+                    'authorized': True,
+                    'reason': 'Carta in whitelist - accesso sempre autorizzato (bypass IN/OUT)',
+                    'customer_id': cache_result.get('customer_id'),
+                    'customer_name': cache_result.get('customer_name'),
+                    'subscription_info': subscription_info,
+                    'source': 'whitelist'
+                }
+            else:
+                return {
+                    'authorized': False,
+                    'reason': 'Non in whitelist',
+                    'source': 'whitelist_check'
+                }
+                
+        except Exception as e:
+            print(f"❌ Errore controllo whitelist per {card_event.uid_formatted}: {e}")
+            return {
+                'authorized': False,
+                'reason': f'Errore whitelist check: {str(e)}',
+                'source': 'whitelist_check'
+            }
+    
+    async def _send_parallel_mqtt_logging(self, card_event: CardEvent):
+        """Invia MQTT in parallelo solo per logging (non per autorizzazione)"""
+        try:
+            auth_request = AuthRequest.from_card_event(
+                card_event=card_event,
+                tornello_id=self.config.system.tornello_id,
+                auth_required=self.config.auth.enabled
+            )
+            
+            mqtt_success = await self.mqtt_client.send_auth_request_parallel(auth_request)
+            print(f"📡 MQTT logging parallelo {'✅' if mqtt_success else '⚠️'}: {card_event.uid_formatted}")
+            
+        except Exception as e:
+            print(f"⚠️ Errore MQTT parallelo per {card_event.uid_formatted}: {e}")
+    
+    async def _log_authorized_access(self, card_event: CardEvent, result: Dict[str, Any], source: str = "cache"):
+        """Log per accesso autorizzato"""
+        if not self.sync_manager:
+            return
+            
+        try:
+            reason_suffix = " | Cache" if source == "cache" else " | Fallback"
+            
+            await self.sync_manager.log_access(
+                card_uid=card_event.uid_formatted,
+                direction=card_event.direction,
+                result="authorized",
+                reason=f"{result['reason']}{reason_suffix}",
+                customer_id=result.get('customer_id'),
+                customer_name=result.get('customer_name'),
+                reader_type=card_event.reader_type,
+                metadata=card_event.metadata
+            )
+            print(f"📝 Log autorizzato: {card_event.uid_formatted} ({source})")
+            
+        except Exception as e:
+            print(f"❌ Errore logging autorizzato per {card_event.uid_formatted}: {e}")
+    
+    async def _log_denied_access(self, card_event: CardEvent, reason: str, source: str = "cache"):
+        """Log per accesso negato"""
+        if not self.sync_manager:
+            return
+            
+        try:
+            reason_suffix = " | Cache" if source == "cache" else " | Fallback"
+            
+            await self.sync_manager.log_access(
+                card_uid=card_event.uid_formatted,
+                direction=card_event.direction,
+                result="denied",
+                reason=f"{reason}{reason_suffix}",
+                customer_id=None,
+                reader_type=card_event.reader_type,
+                metadata=card_event.metadata
+            )
+            print(f"📝 Log negato: {card_event.uid_formatted} ({source}) - {reason}")
+            
+        except Exception as e:
+            print(f"❌ Errore logging negato per {card_event.uid_formatted}: {e}")
+    
+    def _check_internet_connectivity(self) -> bool:
+        """Controlla velocemente se internet è disponibile"""
+        try:
+            import socket
+            # Test veloce a DNS Google (timeout 3 secondi)
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            return True
+        except OSError:
+            return False
     
     def _offline_authentication(self, card_uid: str) -> AccessDecision:
-        """Autenticazione offline usando cache"""
+        """Autenticazione fallback quando server non raggiungibile"""
         if self.config.offline.allow_access:
-            # In modalità offline permetti sempre l'accesso
+            # FALLBACK STRATEGY: Permetti accesso se server non raggiungibile
             self.stats['offline_events'] += 1
+            
+            # 🔄 SMART CACHE REFRESH: Solo se connessione internet disponibile
+            if card_uid not in self.auth_cache:
+                print(f"🔄 Carta {card_uid} sconosciuta - controllo connettività per cache refresh...")
+                
+                # Controlla se connessione internet disponibile per tentare cache refresh
+                if self._check_internet_connectivity():
+                    print(f"🌐 Internet disponibile - tentativo cache refresh al server...")
+                    try:
+                        # Importa e usa cache refresh manager
+                        from rfid_gate.network.cache_refresh_strategy import CacheRefreshManager
+                        refresh_mgr = CacheRefreshManager(self.sync_manager)
+                        
+                        # Prova refresh per carta sconosciuta in background (non-bloccante)
+                        import asyncio
+                        if hasattr(asyncio, '_get_running_loop'):
+                            try:
+                                loop = asyncio.get_running_loop()
+                                task = loop.create_task(refresh_mgr.handle_unknown_card_refresh(card_uid))
+                                print(f"📡 Cache refresh avviato in background per {card_uid}")
+                            except RuntimeError:
+                                print(f"📡 Cache refresh non disponibile (no event loop)")
+                        else:
+                            print(f"📡 Cache refresh non disponibile (asyncio non supportato)")
+                            
+                    except Exception as e:
+                        print(f"⚠️ Errore avvio cache refresh per {card_uid}: {e}")
+                else:
+                    print(f"❌ Internet non disponibile - cache refresh saltato")
+                    print(f"💾 Fallback: accesso permesso usando solo cache locale per {card_uid}")
+            
             return AccessDecision.OFFLINE
         else:
             # Verifica cache se disponibile
@@ -970,6 +1103,80 @@ class AccessControlSystem:
             
         except Exception as e:
             print(f"❌ Errore durante spegnimento: {e}")
+    
+    async def _direct_gate_verification(self, card_uid: str, direction: str) -> Dict[str, Any]:
+        """
+        Chiamata diretta a /api/gate-verification quando cache refresh fallisce.
+        Questa è l'ultima risorsa quando la carta non è in cache e non è stata trovata dal sync.
+        
+        Returns:
+            Dict con 'authorized', 'reason', 'card_data', etc.
+        """
+        try:
+            import aiohttp
+            import asyncio
+            
+            # URL endpoint dal config
+            server_url = self.config.sync.cache_sync_server_url
+            endpoint = os.getenv('GATE_VERIFICATION_ENDPOINT', '/api/gate-verification')
+            url = f"{server_url}{endpoint}"
+            
+            # Payload per gate-verification
+            payload = {
+                "uid": card_uid,
+                "identificativo_tornello": self.config.system.tornello_id,
+                "direction": direction  # Includi direzione se necessario
+            }
+            
+            print(f"🔗 Chiamata diretta gate-verification: {url}")
+            print(f"📤 Payload: {payload}")
+            
+            timeout = aiohttp.ClientTimeout(total=self.config.sync.cache_sync_timeout)
+            
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Estrai risultato
+                        authorized = data.get('authorized', False)
+                        message = data.get('message', 'Risposta gate-verification')
+                        card_data = data.get('card_data', {})
+                        
+                        print(f"✅ Gate-verification risposta: authorized={authorized}, message='{message}'")
+                        
+                        return {
+                            'authorized': authorized,
+                            'reason': f"Gate-verification: {message}",
+                            'card_data': card_data,
+                            'customer_id': card_data.get('customer_id'),
+                            'customer_name': card_data.get('customer_name'),
+                            'subscription_info': card_data.get('subscription_info', {}),
+                            'source': 'direct_gate_verification'
+                        }
+                    else:
+                        error_text = await response.text()
+                        print(f"❌ Gate-verification error {response.status}: {error_text}")
+                        return {
+                            'authorized': False,
+                            'reason': f"Gate-verification error: HTTP {response.status}",
+                            'source': 'direct_gate_verification'
+                        }
+                        
+        except asyncio.TimeoutError:
+            print(f"⏱️ Timeout chiamata gate-verification per {card_uid}")
+            return {
+                'authorized': False,
+                'reason': 'Gate-verification timeout',
+                'source': 'direct_gate_verification'
+            }
+        except Exception as e:
+            print(f"❌ Errore gate-verification per {card_uid}: {e}")
+            return {
+                'authorized': False,
+                'reason': f'Gate-verification error: {str(e)}',
+                'source': 'direct_gate_verification'
+            }
 
 
 # Export

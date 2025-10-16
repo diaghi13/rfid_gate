@@ -272,3 +272,38 @@ class CacheRefreshManager:
         except Exception as e:
             print(f"⚠️ Errore refresh abbonamento rinnovato: {e}")
             return False
+    
+    async def handle_unknown_card_refresh(self, card_uid: str) -> bool:
+        """
+        Gestisce refresh cache per carta sconosciuta (non in cache locale).
+        
+        Scenario: Cliente ha carta nuova o cache è stata svuotata.
+        Controlla server per vedere se è una carta valida.
+        """
+        print(f"🔄 Cache refresh per carta sconosciuta: {card_uid}")
+        
+        if not self.enabled:
+            print("❌ Cache refresh disabilitato")
+            return False
+            
+        # Controlla se dobbiamo aspettare cooldown (stesso di handle_denied_card_refresh)
+        if not await self._check_cooldown(card_uid):
+            return False
+        
+        try:
+            # Controlla server per carta sconosciuta
+            server_data = await self._check_single_card_server(card_uid)
+            
+            if server_data and server_data.get('found'):
+                await self._update_single_card_cache(card_uid, server_data)
+                print(f"✅ Carta sconosciuta aggiunta alla cache: {card_uid}")
+                return True
+            else:
+                print(f"📭 Carta sconosciuta non trovata nel server: {card_uid}")
+                # Registra il tentativo per cooldown
+                await self._update_refresh_timestamp(card_uid)
+                return False
+                
+        except Exception as e:
+            print(f"⚠️ Errore refresh carta sconosciuta: {e}")
+            return False
