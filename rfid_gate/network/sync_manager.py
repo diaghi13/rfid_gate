@@ -68,11 +68,15 @@ class CardData:
     customer_name: str
     in_white_list: bool
     active_subscriptions: List[Dict[str, Any]]
+    active_membership_fee: Optional[Dict[str, Any]] = None  # ✨ NUOVO: Quota associativa
     
     def __post_init__(self):
         # Assicura che active_subscriptions sia una lista
         if not isinstance(self.active_subscriptions, list):
             self.active_subscriptions = []
+        # Assicura che active_membership_fee sia un dict o None
+        if self.active_membership_fee is not None and not isinstance(self.active_membership_fee, dict):
+            self.active_membership_fee = None
 
 
 @dataclass
@@ -191,6 +195,7 @@ class SyncManager:
                 customer_name TEXT,
                 in_white_list BOOLEAN DEFAULT 0,
                 active_subscriptions TEXT,  -- JSON delle subscriptions
+                active_membership_fee TEXT,  -- ✨ NUOVO: JSON quota associativa
                 last_sync TIMESTAMP,
                 is_active BOOLEAN DEFAULT 1
             )
@@ -200,6 +205,14 @@ class SyncManager:
         try:
             cursor.execute('ALTER TABLE synced_cards ADD COLUMN last_server_check TIMESTAMP')
             self.logger.info("✅ Migrazione: Aggiunta colonna last_server_check")
+        except sqlite3.OperationalError:
+            # Colonna già esistente
+            pass
+            
+        # ✨ MIGRAZIONE: Aggiungi colonna active_membership_fee se non esiste
+        try:
+            cursor.execute('ALTER TABLE synced_cards ADD COLUMN active_membership_fee TEXT')
+            self.logger.info("✅ Migrazione: Aggiunta colonna active_membership_fee")
         except sqlite3.OperationalError:
             # Colonna già esistente
             pass
@@ -441,7 +454,7 @@ class SyncManager:
         
         try:
             cursor.execute('''
-                SELECT customer_id, customer_name, in_white_list, active_subscriptions 
+                SELECT customer_id, customer_name, in_white_list, active_subscriptions, active_membership_fee 
                 FROM synced_cards 
                 WHERE card_uid = ? AND is_active = 1
             ''', (card_uid,))
@@ -462,7 +475,7 @@ class SyncManager:
                     'offline_mode': True
                 }
             
-            customer_id, customer_name, in_white_list, subscriptions_json = result
+            customer_id, customer_name, in_white_list, subscriptions_json, membership_fee_json = result
             
             # 🎯 WHITELIST: Se la carta è in whitelist, accesso sempre autorizzato
             if in_white_list:
@@ -475,12 +488,49 @@ class SyncManager:
                     'offline_mode': True
                 }
             
-            # Altrimenti verifica abbonamenti normalmente
-            active_subscriptions = json.loads(subscriptions_json)
+            # Altrimenti verifica abbonamenti E membership fee
+            active_subscriptions = json.loads(subscriptions_json or '[]')
+            active_membership_fee = json.loads(membership_fee_json) if membership_fee_json else None
             
-            # Verifica abbonamenti attivi
-            valid_subscription = None
             now = datetime.now()
+            
+            # ✨ STEP 1: Verifica membership fee (quota associativa)
+            valid_membership_fee = False
+            membership_reason = ""
+            
+            if active_membership_fee:
+                if active_membership_fee.get('is_active', False):
+                    expiry_str = active_membership_fee.get('expiry_date')
+                    if expiry_str:
+                        try:
+                            expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d')
+                            if expiry_date >= now:
+                                valid_membership_fee = True
+                                membership_reason = f"Quota associativa valida fino al {expiry_str}"
+                            else:
+                                membership_reason = f"Quota associativa scaduta il {expiry_str}"
+                        except ValueError:
+                            membership_reason = "Formato data quota associativa non valido"
+                    else:
+                        membership_reason = "Quota associativa senza data di scadenza"
+                else:
+                    membership_reason = "Quota associativa non attiva"
+            else:
+                membership_reason = "Nessuna quota associativa trovata"
+            
+            if not valid_membership_fee:
+                return {
+                    'authorized': False,
+                    'customer_id': customer_id,
+                    'customer_name': customer_name,
+                    'reason': f'Accesso negato: {membership_reason}',
+                    'subscription_info': None,
+                    'membership_fee_info': active_membership_fee,
+                    'offline_mode': True
+                }
+            
+            # ✨ STEP 2: Verifica abbonamenti attivi (solo se membership fee è valida)
+            valid_subscription = None
             
             for subscription in active_subscriptions:
                 if not subscription.get('is_active', True):
@@ -507,22 +557,26 @@ class SyncManager:
                         self._update_subscription_usage(card_uid, subscription)
                         break
             
-            if valid_subscription:
+            # ✅ RISULTATO FINALE: Entrambi devono essere validi
+            if valid_subscription and valid_membership_fee:
                 return {
                     'authorized': True,
-                    'customer_id': customer_id,  # ✨ NUOVO: ID cliente
+                    'customer_id': customer_id,
                     'customer_name': customer_name,
-                    'reason': 'Accesso autorizzato (modalità offline)',
+                    'reason': f'Accesso autorizzato - {membership_reason}',
                     'subscription_info': valid_subscription,
+                    'membership_fee_info': active_membership_fee,
                     'offline_mode': True
                 }
             else:
+                subscription_reason = "Nessun abbonamento valido" if not valid_subscription else "Abbonamento valido"
                 return {
                     'authorized': False,
-                    'customer_id': customer_id,  # ✨ NUOVO: ID cliente
+                    'customer_id': customer_id,
                     'customer_name': customer_name,
-                    'reason': 'Nessun abbonamento valido',
-                    'subscription_info': None,
+                    'reason': f'Accesso negato: {subscription_reason}, {membership_reason}',
+                    'subscription_info': valid_subscription,
+                    'membership_fee_info': active_membership_fee,
                     'offline_mode': True
                 }
                 
@@ -730,14 +784,15 @@ class SyncManager:
                 
                 cursor.execute('''
                     INSERT OR REPLACE INTO synced_cards 
-                    (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, 1)
+                    (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, active_membership_fee, last_sync, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                 ''', (
                     card_data.get('card_uid'),
                     card_data.get('customer_id'),  # Può essere None/null
                     card_data.get('customer_name'),
                     card_data.get('in_white_list', False),
                     json.dumps(card_data.get('active_subscriptions', [])),
+                    json.dumps(card_data.get('active_membership_fee')) if card_data.get('active_membership_fee') else None,  # ✨ NUOVO
                     datetime.now()
                 ))
             
@@ -930,14 +985,15 @@ class SyncManager:
                     
                     cursor.execute('''
                         INSERT OR REPLACE INTO synced_cards 
-                        (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, last_sync, is_active)
-                        VALUES (?, ?, ?, ?, ?, ?, 1)
+                        (card_uid, customer_id, customer_name, in_white_list, active_subscriptions, active_membership_fee, last_sync, is_active)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                     ''', (
                         card_uid,
                         card_data.get('customer_id'),  # Può essere None/null
                         card_data.get('customer_name'),
                         card_data.get('in_white_list', False),
                         json.dumps(card_data.get('active_subscriptions', [])),
+                        json.dumps(card_data.get('active_membership_fee')) if card_data.get('active_membership_fee') else None,  # ✨ NUOVO
                         datetime.now()
                     ))
                     self.logger.debug(f"✅ Aggiornata carta: {card_uid}")
