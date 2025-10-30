@@ -29,7 +29,7 @@ from rfid_gate.config.settings import Config  # Compatibilità
 # 🚀 APPLICA PATCH INDEPENDENT RELAY
 print("🔧 Applicazione patch Independent Relay...")
 try:
-    from patch_independent_relay import apply_independent_relay_patch
+    from rfid_gate.utils.patch_independent_relay import apply_independent_relay_patch
     if apply_independent_relay_patch():
         print("✅ Independent Relay Patch attivo - Thread completamente indipendenti")
     else:
@@ -37,6 +37,16 @@ try:
 except Exception as e:
     print(f"⚠️  Errore caricamento patch relay: {e}")
     print("🔄 Continuando con sistema relay standard...")
+
+# 🔧 APPLICA FIX RESILIENZA HARDWARE POWER-CYCLE 
+print("🔧 Applicazione fix Resilienza Hardware...")
+try:
+    from tests.debug.hardware_resilience_fix import HardwareResilienceManager
+    HARDWARE_RESILIENCE_AVAILABLE = True
+    print("✅ Fix Resilienza Hardware disponibile - Power-cycle recovery attivo")
+except Exception as e:
+    print(f"⚠️  Fix Resilienza Hardware non disponibile: {e}")
+    HARDWARE_RESILIENCE_AVAILABLE = False
 
 
 class RFIDGateApplication:
@@ -85,8 +95,9 @@ class RFIDGateApplication:
         
         Metodo principale che:
         1. Inizializza il sistema
-        2. Avvia il loop principale
-        3. Gestisce shutdown graceful
+        2. Applica fix resilienza hardware 
+        3. Avvia il loop principale
+        4. Gestisce shutdown graceful
         """
         try:
             print("🚀 Avvio RFID Gate System")
@@ -95,8 +106,12 @@ class RFIDGateApplication:
             # Mostra configurazione (compatibilità)
             self._print_configuration()
             
-            # Crea e inizializza sistema
+            # Crea sistema
             self.system = AccessControlSystem()
+            
+            # 🔧 APPLICA FIX RESILIENZA HARDWARE PRIMA DELL'INIZIALIZZAZIONE
+            if HARDWARE_RESILIENCE_AVAILABLE:
+                await self._apply_hardware_resilience_fix()
             
             # Setup callbacks per logging compatibile
             self.system.on_access_event = self._on_access_event
@@ -146,6 +161,33 @@ class RFIDGateApplication:
         
         print(f"   Formato UID: {Config.UID_FORMAT_MODE} (chars: {Config.UID_CHARS_COUNT})")
         print()
+    
+    async def _apply_hardware_resilience_fix(self):
+        """Applica fix resilienza hardware power-cycle"""
+        print("🔧 Applicazione Fix Resilienza Hardware Power-Cycle...")
+        print("   Risolve problemi relè/lettore OUT dopo interruzione alimentazione")
+        
+        try:
+            # Crea configurazione per il fix
+            config = RFIDGateConfig.from_env()
+            
+            # Applica fix resilienza
+            resilience_manager = HardwareResilienceManager()
+            success = await resilience_manager.initialize_hardware_resilient(config)
+            
+            if success:
+                print("✅ Fix Resilienza Hardware applicato con successo!")
+                print("   Sistema ora resiliente a power-cycle come versione legacy")
+            else:
+                print("⚠️ Fix Resilienza Hardware parzialmente fallito")
+                print("   Sistema continuerà con inizializzazione standard")
+            
+            return success
+            
+        except Exception as e:
+            print(f"❌ Errore applicazione fix resilienza: {e}")
+            print("   Sistema continuerà con inizializzazione standard")
+            return False
     
     def _on_access_event(self, event):
         """Callback evento accesso (compatibilità con logging esistente)"""

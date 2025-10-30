@@ -256,8 +256,10 @@ class AsyncMQTTClient:
         self.client: Optional[mqtt.Client] = None
         self.state = ConnectionState.DISCONNECTED
         self.connection_attempts = 0
-        self.max_retries = 3
-        self.reconnect_delay = 5.0
+        self.max_retries = 10  # 🔧 Aumentato da 3 a 10
+        self.reconnect_delay = 2.0  # 🔧 Ridotto da 5.0 a 2.0
+        self.last_connection_time = 0  # 🔧 Timestamp ultima connessione
+        self.connection_reset_interval = 300  # 🔧 Reset tentativi ogni 5 minuti
         
         # Message queuing
         self.message_queue: List[MQTTMessage] = []
@@ -393,6 +395,7 @@ class AsyncMQTTClient:
         if rc == 0:
             self.state = ConnectionState.CONNECTED
             self.connection_attempts = 0
+            self.last_connection_time = time.time()  # 🔧 Registra timestamp connessione
             print("✅ MQTT connesso")
             
             # Subscribe ai topic necessari
@@ -486,13 +489,19 @@ class AsyncMQTTClient:
             print(f"❌ Errore gestione auth response: {e}")
     
     async def _auto_reconnect(self):
-        """Riconnessione automatica"""
+        """Riconnessione automatica migliorata"""
         while self.state == ConnectionState.DISCONNECTED:
             try:
                 await asyncio.sleep(self.reconnect_delay)
                 
+                # 🔧 Reset tentativi se sono passati più di 5 minuti dall'ultima connessione
+                if (time.time() - self.last_connection_time) > self.connection_reset_interval:
+                    if self.connection_attempts >= self.max_retries:
+                        print(f"🔄 Reset tentativi riconnessione dopo {self.connection_reset_interval}s")
+                        self.connection_attempts = 0
+                
                 if self.connection_attempts < self.max_retries:
-                    print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}")
+                    print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}/{self.max_retries}")
                     success = await self.connect()
                     
                     if success:
@@ -500,8 +509,10 @@ class AsyncMQTTClient:
                         break
                 else:
                     print(f"❌ Max tentativi riconnessione raggiunti ({self.max_retries})")
-                    self.state = ConnectionState.ERROR
-                    break
+                    print(f"⏱️ Attendo {self.connection_reset_interval}s prima del reset...")
+                    await asyncio.sleep(self.connection_reset_interval)
+                    self.connection_attempts = 0  # 🔧 Reset per riprovare
+                    print("🔄 Reset tentativi completato, riprovo...")
                     
             except Exception as e:
                 print(f"❌ Errore riconnessione: {e}")

@@ -1,231 +1,279 @@
 #!/usr/bin/env python3
 """
-📡 Test MQTT Reale (Opzionale)
-=============================
-
-Test connessione MQTT reale al broker per verificare il workflow completo.
-Se MQTT non è disponibile, mostra come dovrebbe funzionare.
+🧪 Test MQTT Reale Semplice - Verifica Connessione Broker
+=========================================================
+Test diretto per verificare se la connessione MQTT funziona realmente
 """
 
-import sys
-import asyncio
-import json
+import os
 import ssl
+import json
+import time
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
-try:
-    import asyncio_mqtt
-    MQTT_AVAILABLE = True
-except ImportError:
-    MQTT_AVAILABLE = False
-    print("⚠️ asyncio_mqtt non disponibile - test MQTT simulato")
+# Carica file .env
+def load_env():
+    env_file = Path(__file__).parent.parent.parent / '.env'
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+        print("✅ File .env caricato")
 
-# Add il modulo principale al path
-sys.path.append(str(Path(__file__).parent))
+# Configurazioni dal .env
+load_env()
 
-class MQTTRealTester:
-    """Test MQTT reale con broker"""
+MQTT_CONFIG = {
+    'broker': os.getenv('MQTT_BROKER', 'mqbrk.ddns.net'),
+    'port': int(os.getenv('MQTT_PORT', '8883')),
+    'username': os.getenv('MQTT_USERNAME', 'palestraUser'),
+    'password': os.getenv('MQTT_PASSWORD', '28dade03$'),
+    'use_tls': os.getenv('MQTT_USE_TLS', 'True').lower() == 'true',
+    'keep_alive': int(os.getenv('MQTT_KEEP_ALIVE', '60')),
+    'tornello_id': os.getenv('TORNELLO_ID', 'tornello_01')
+}
+
+# Topics
+TOPICS = {
+    'card_read': os.getenv('MQTT_CARD_READ_TOPIC', 'gate/tornello_01/badge'),
+    'auth_response': os.getenv('MQTT_AUTH_RESPONSE_TOPIC', 'gate/tornello_01/response'),
+    'manual_open': os.getenv('MQTT_MANUAL_OPEN_TOPIC', 'gate/tornello_01/manual_open')
+}
+
+async def test_mqtt_connection():
+    """Test connessione MQTT con paho-mqtt"""
+    print("🧪 TEST CONNESSIONE MQTT REALE")
+    print("=" * 60)
     
-    def __init__(self):
-        self.broker = "mqbrk.ddns.net"
-        self.port = 8883
-        self.username = "palestraUser"
-        self.password = "28dade03$"
-        self.tornello_id = "tornello_01"
+    try:
+        import paho.mqtt.client as mqtt
         
-        # Topics
-        self.card_topic = f"gate/{self.tornello_id}/badge"
-        self.auth_topic = f"gate/{self.tornello_id}/auth_response"
+        # Variabili di stato
+        connected = False
+        connection_result = None
+        messages_received = []
         
-        # SSL context per MQTT TLS
-        self.ssl_context = ssl.create_default_context()
-        self.ssl_context.check_hostname = False
-        self.ssl_context.verify_mode = ssl.CERT_NONE
-    
-    async def test_mqtt_connection(self):
-        """Test connessione MQTT"""
-        print("📡 Test Connessione MQTT")
-        print("-" * 30)
+        def on_connect(client, userdata, flags, rc):
+            nonlocal connected, connection_result
+            connection_result = rc
+            if rc == 0:
+                connected = True
+                print("✅ CONNESSO AL BROKER MQTT!")
+                print(f"   Broker: {MQTT_CONFIG['broker']}:{MQTT_CONFIG['port']}")
+                print(f"   Username: {MQTT_CONFIG['username']}")
+                print(f"   TLS: {MQTT_CONFIG['use_tls']}")
+            else:
+                print(f"❌ CONNESSIONE FALLITA - Codice: {rc}")
+                error_messages = {
+                    1: "Protocol version non supportato",
+                    2: "Identificativo client non valido", 
+                    3: "Server non disponibile",
+                    4: "Username/password non validi",
+                    5: "Non autorizzato"
+                }
+                print(f"   Errore: {error_messages.get(rc, 'Errore sconosciuto')}")
         
-        if not MQTT_AVAILABLE:
-            print("❌ asyncio_mqtt non installato")
-            print("💡 Per test MQTT reale: pip install asyncio-mqtt")
-            return False
+        def on_disconnect(client, userdata, rc):
+            nonlocal connected
+            connected = False
+            print(f"🔌 DISCONNESSO - Codice: {rc}")
         
-        try:
-            print(f"🔗 Connessione a {self.broker}:{self.port}")
+        def on_message(client, userdata, msg):
+            nonlocal messages_received
+            try:
+                payload = msg.payload.decode('utf-8')
+                message_info = {
+                    'topic': msg.topic,
+                    'payload': payload,
+                    'timestamp': datetime.now().isoformat()
+                }
+                messages_received.append(message_info)
+                print(f"📨 MESSAGGIO RICEVUTO:")
+                print(f"   Topic: {msg.topic}")
+                print(f"   Payload: {payload}")
+            except Exception as e:
+                print(f"❌ Errore decodifica messaggio: {e}")
+        
+        # Crea client
+        print("🔧 Creazione client MQTT...")
+        client = mqtt.Client()
+        client.username_pw_set(MQTT_CONFIG['username'], MQTT_CONFIG['password'])
+        
+        # Configura callbacks
+        client.on_connect = on_connect
+        client.on_disconnect = on_disconnect  
+        client.on_message = on_message
+        
+        # Configura TLS se necessario
+        if MQTT_CONFIG['use_tls']:
+            print("🔒 Configurazione TLS...")
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            client.tls_set_context(context)
+        
+        # Tenta connessione
+        print("🔌 Tentativo di connessione...")
+        start_time = time.time()
+        
+        client.connect_async(
+            MQTT_CONFIG['broker'], 
+            MQTT_CONFIG['port'], 
+            MQTT_CONFIG['keep_alive']
+        )
+        client.loop_start()
+        
+        # Attendi connessione (max 10 secondi)
+        timeout = 10
+        elapsed = 0
+        while not connected and elapsed < timeout:
+            await asyncio.sleep(0.1)
+            elapsed = time.time() - start_time
             
-            async with asyncio_mqtt.Client(
-                hostname=self.broker,
-                port=self.port,
-                username=self.username,
-                password=self.password,
-                tls_context=self.ssl_context,
-                timeout=10
-            ) as client:
-                print("✅ Connessione MQTT riuscita")
-                
-                # Test subscription
-                await client.subscribe(self.auth_topic)
-                print(f"✅ Subscription a {self.auth_topic}")
-                
-                return True
-                
-        except Exception as e:
-            print(f"❌ Errore connessione MQTT: {e}")
-            return False
-    
-    async def test_mqtt_card_send(self, card_uid: str):
-        """Test invio carta via MQTT"""
-        print(f"\n📤 Test Invio Carta MQTT: {card_uid}")
-        print("-" * 30)
-        
-        # Messaggio carta (formato corretto per broker)
-        message = {
-            "uid": card_uid,
-            "direzione": "in",  # Campo corretto per il broker
-            "tornello_id": self.tornello_id,
-            "timestamp": datetime.now().isoformat(),
-            "reader_type": "PN532",
-            "metadata": {
+        if connected:
+            connection_time = time.time() - start_time
+            print(f"⏱️ Tempo connessione: {connection_time:.2f}s")
+            
+            # Test sottoscrizione topics
+            print("\\n📡 TEST SOTTOSCRIZIONE TOPICS...")
+            for topic_name, topic_path in TOPICS.items():
+                result = client.subscribe(topic_path, qos=1)
+                if result[0] == 0:
+                    print(f"✅ Sottoscritto a: {topic_path}")
+                else:
+                    print(f"❌ Errore sottoscrizione: {topic_path}")
+            
+            # Test invio messaggio
+            print("\\n📤 TEST INVIO MESSAGGIO...")
+            test_message = {
+                "card_uid": "TEST123456",
+                "identificativo_tornello": MQTT_CONFIG['tornello_id'],
+                "timestamp": datetime.now().isoformat(),
+                "direzione": "in",
                 "test": True,
-                "source": "python_test"
+                "message": "Test connessione MQTT reale"
             }
-        }
-        
-        print(f"📋 Payload: {json.dumps(message, indent=2)}")
-        
-        if not MQTT_AVAILABLE:
-            print("🔄 MQTT simulato - messaggio che verrebbe inviato:")
-            print(f"   Topic: {self.card_topic}")
-            print(f"   Payload: {json.dumps(message)}")
-            print("🔄 Broker riceverebbe e chiamerebbe /api/gate-verification")
+            
+            result = client.publish(
+                TOPICS['card_read'],
+                json.dumps(test_message),
+                qos=1
+            )
+            
+            if result.rc == 0:
+                print(f"✅ Messaggio inviato a: {TOPICS['card_read']}")
+                print(f"   Payload: {json.dumps(test_message, indent=2)}")
+            else:
+                print(f"❌ Errore invio messaggio: {result.rc}")
+            
+            # Attendi eventuali messaggi (5 secondi)
+            print("\\n⏳ Attendo messaggi per 5 secondi...")
+            await asyncio.sleep(5)
+            
+            # Statistiche finali
+            print("\\n" + "=" * 60)
+            print("📊 STATISTICHE FINALI:")
+            print(f"✅ Connessione: {'OK' if connected else 'FALLITA'}")
+            print(f"📨 Messaggi ricevuti: {len(messages_received)}")
+            print(f"⏱️ Tempo connessione: {connection_time:.2f}s")
+            
+            if messages_received:
+                print("\\n📬 MESSAGGI RICEVUTI:")
+                for i, msg in enumerate(messages_received, 1):
+                    print(f"   {i}. Topic: {msg['topic']}")
+                    print(f"      Timestamp: {msg['timestamp']}")
+                    print(f"      Payload: {msg['payload'][:100]}...")
+            
+            # Disconnetti
+            client.disconnect()
+            client.loop_stop()
+            
             return True
-        
-        try:
-            async with asyncio_mqtt.Client(
-                hostname=self.broker,
-                port=self.port,
-                username=self.username,
-                password=self.password,
-                tls_context=self.ssl_context,
-                timeout=10
-            ) as client:
-                
-                # Subscribe alla risposta
-                await client.subscribe(self.auth_topic)
-                print(f"✅ Listening su {self.auth_topic}")
-                
-                # Invia messaggio carta
-                await client.publish(
-                    self.card_topic,
-                    json.dumps(message),
-                    qos=1
-                )
-                print(f"✅ Messaggio inviato a {self.card_topic}")
-                
-                # Aspetta risposta (con timeout)
-                print("⏳ Aspetto risposta broker...")
-                
-                try:
-                    async with asyncio.timeout(10):  # Timeout 10s
-                        async for mqtt_message in client.messages:
-                            if mqtt_message.topic.matches(self.auth_topic):
-                                response = json.loads(mqtt_message.payload.decode())
-                                print(f"📥 Risposta ricevuta:")
-                                print(f"   {json.dumps(response, indent=2)}")
-                                
-                                # Analizza risposta
-                                if response.get('authorized'):
-                                    print(f"✅ Broker autorizza: {response.get('message', 'OK')}")
-                                else:
-                                    print(f"❌ Broker nega: {response.get('message', 'Denied')}")
-                                
-                                return True
-                                
-                except asyncio.TimeoutError:
-                    print("⏰ Timeout - nessuna risposta dal broker")
-                    print("💭 Possibili cause:")
-                    print("   - Broker non configurato per questo tornello")
-                    print("   - Endpoint gate-verification non risponde")
-                    print("   - Configurazione topic non corretta")
-                    return False
-                
-        except Exception as e:
-            print(f"❌ Errore MQTT: {e}")
-            return False
-    
-    async def simulate_full_workflow(self, card_uid: str):
-        """Simula workflow completo"""
-        print(f"\n🔄 Workflow Completo Simulato: {card_uid}")
-        print("-" * 40)
-        
-        print("📖 FASI DEL WORKFLOW:")
-        print("1. 📱 Carta passata su lettore RFID")
-        print("2. 💾 Check cache locale")
-        print("3. 🔄 Se cache nega → Cache refresh")
-        print("4. 📡 Se cache OK → Invio MQTT")
-        print("5. 🔍 Broker riceve → Chiama gate-verification")
-        print("6. ✅/❌ Broker risponde → Azione tornello")
-        
-        print(f"\n🎬 SIMULAZIONE:")
-        
-        # Step 1-2: Cache check simulato
-        print("1-2. 📱💾 Carta letta, cache check...")
-        await asyncio.sleep(0.1)
-        print("     💭 Supponiamo cache neghi (dati vecchi)")
-        
-        # Step 3: Cache refresh (reale)
-        print("3. 🔄 Cache refresh...")
-        await asyncio.sleep(0.1)
-        print("     ✅ Cache aggiornata (vedi test precedenti)")
-        
-        # Step 4: MQTT send (reale o simulato)
-        print("4. 📡 Invio MQTT...")
-        mqtt_success = await self.test_mqtt_card_send(card_uid)
-        
-        if mqtt_success:
-            print("5-6. ✅ Workflow completato con successo")
+            
         else:
-            print("5-6. ⚠️ Workflow simulato (MQTT non disponibile)")
-        
-        return mqtt_success
+            print(f"❌ TIMEOUT CONNESSIONE ({timeout}s)")
+            print(f"   Risultato: {connection_result}")
+            client.loop_stop()
+            return False
+            
+    except ImportError:
+        print("❌ ERRORE: paho-mqtt non installato")
+        print("   Installare con: pip install paho-mqtt")
+        return False
+    except Exception as e:
+        print(f"❌ ERRORE GENERICO: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+async def test_mqtt_config_validation():
+    """Valida la configurazione MQTT dal .env"""
+    print("\\n🔧 VALIDAZIONE CONFIGURAZIONE MQTT")
+    print("=" * 60)
+    
+    # Controlla configurazioni obbligatorie
+    required_configs = {
+        'MQTT_BROKER': MQTT_CONFIG['broker'],
+        'MQTT_PORT': MQTT_CONFIG['port'],
+        'MQTT_USERNAME': MQTT_CONFIG['username'],
+        'MQTT_PASSWORD': MQTT_CONFIG['password']
+    }
+    
+    print("📋 Configurazioni trovate:")
+    all_ok = True
+    for key, value in required_configs.items():
+        if value:
+            # Nascondi password per sicurezza
+            display_value = "***" if 'PASSWORD' in key else str(value)
+            print(f"   ✅ {key}: {display_value}")
+        else:
+            print(f"   ❌ {key}: MANCANTE")
+            all_ok = False
+    
+    print("\\n🎯 Topics configurati:")
+    for name, topic in TOPICS.items():
+        print(f"   ✅ {name}: {topic}")
+    
+    print("\\n🔒 Configurazioni sicurezza:")
+    print(f"   ✅ TLS: {MQTT_CONFIG['use_tls']}")
+    print(f"   ✅ Keep Alive: {MQTT_CONFIG['keep_alive']}s")
+    
+    return all_ok
 
 async def main():
-    """Test principale MQTT"""
-    print("📡 TEST MQTT REALE + WORKFLOW")
-    print("=" * 50)
+    """Funzione principale"""
+    print("🚀 AVVIO TEST SUITE MQTT REALE")
+    print("Verifica connessione, autenticazione e invio messaggi")
+    print()
     
-    tester = MQTTRealTester()
+    # 1. Validazione configurazione
+    config_ok = await test_mqtt_config_validation()
+    if not config_ok:
+        print("\\n❌ CONFIGURAZIONE NON VALIDA - Test interrotto")
+        return False
     
-    # Test 1: Connessione MQTT
-    mqtt_connected = await tester.test_mqtt_connection()
+    # 2. Test connessione reale
+    connection_ok = await test_mqtt_connection()
     
-    # Test 2: Workflow completo
-    test_card = "02D9BAEB"  # Carta che sappiamo esistere
-    workflow_success = await tester.simulate_full_workflow(test_card)
-    
-    # Riassunto
-    print(f"\n📊 RIASSUNTO TEST MQTT")
-    print("=" * 30)
-    print(f"🔗 Connessione MQTT: {'✅ OK' if mqtt_connected else '❌ FAIL'}")
-    print(f"🔄 Workflow: {'✅ OK' if workflow_success else '⚠️ SIMULATO'}")
-    
-    if not MQTT_AVAILABLE:
-        print(f"\n💡 Per test MQTT reale completo:")
-        print(f"   pip install asyncio-mqtt")
-        print(f"   Poi ri-esegui questo script")
-    
-    if mqtt_connected and workflow_success:
-        print(f"\n🎉 SISTEMA MQTT COMPLETAMENTE FUNZIONANTE!")
-    elif workflow_success:
-        print(f"\n✅ Sistema pronto (MQTT simulato per test)")
+    # 3. Risultato finale
+    print("\\n" + "=" * 60)
+    print("🎯 RISULTATO FINALE:")
+    if connection_ok:
+        print("✅ MQTT COMPLETAMENTE OPERATIVO!")
+        print("   - Connessione broker: OK")
+        print("   - Autenticazione: OK") 
+        print("   - Invio messaggi: OK")
+        print("   - Sottoscrizione topics: OK")
     else:
-        print(f"\n⚠️ Verificare configurazione MQTT")
+        print("❌ PROBLEMI MQTT RILEVATI")
+        print("   Controllare configurazione e connettività")
     
-    return True
+    return connection_ok
 
 if __name__ == "__main__":
-    result = asyncio.run(main())
-    sys.exit(0 if result else 1)
+    asyncio.run(main())

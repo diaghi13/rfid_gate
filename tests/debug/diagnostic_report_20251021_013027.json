@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-10-21T01:30:27.172447",
+  "diagnostic_version": "1.0",
+  "system_info": {
+    "python_version": "3.11.5 (v3.11.5:cce6ba91b3, Aug 24 2023, 10:50:31) [Clang 13.0.0 (clang-1300.0.29.30)]",
+    "platform": "darwin"
+  },
+  "mqtt_tests": {
+    "problem_analysis": "\n🔴 PROBLEMA IDENTIFICATO:\nIl sistema refactored originale aveva un limite di riconnessione che il legacy non aveva.\n\nLEGACY:\n- Riprova SEMPRE riconnessione senza limiti temporali\n- Logica più semplice ma più resiliente\n\nREFACTORED ORIGINALE: \n- Si fermava dopo 3 tentativi falliti\n- Andava in ERROR state permanente\n\nREFACTORED PATCH:\n- Risolve il problema con reset automatico\n- Mantiene benefici async ma aggiunge resilienza legacy\n        ",
+    "current_resilience": {
+      "max_retries": 10,
+      "reconnect_delay": 2.0,
+      "score": "ALTO"
+    }
+  },
+  "hardware_tests": {
+    "potential_issues": [
+      "🔍 Modalità bidirezionale può avere problemi SPI dopo power-cycle",
+      "⚠️ Due lettori PN532 su SPI - possibili conflitti pin dopo restart"
+    ],
+    "current_config": {
+      "relays": [
+        {
+          "direction": "out",
+          "pin": 19,
+          "active_low": true
+        }
+      ],
+      "readers": [
+        {
+          "direction": "in",
+          "type": "pn532",
+          "spi_device": 0
+        },
+        {
+          "direction": "out",
+          "type": "pn532",
+          "spi_device": 1
+        }
+      ],
+      "score": "MEDIO"
+    }
+  },
+  "comparison": {
+    "mqtt": {
+      "legacy": {
+        "max_retries": 3,
+        "retry_logic": "Sincrono con loop interno",
+        "reconnect_strategy": "Immediata in _on_disconnect",
+        "auto_reconnect": "Automatica senza limiti nel tempo",
+        "connection_timeout": 10,
+        "implementation": "paho-mqtt diretto con sync callbacks"
+      },
+      "refactored_original": {
+        "max_retries": 3,
+        "retry_logic": "Asincrono con task separato",
+        "reconnect_strategy": "Task asincrono con limite tentativi",
+        "auto_reconnect": "Si ferma dopo max_retries",
+        "connection_timeout": 5,
+        "implementation": "AsyncMQTTClient wrapper con async/await"
+      },
+      "refactored_patched": {
+        "max_retries": 10,
+        "retry_logic": "Asincrono con reset periodico",
+        "reconnect_strategy": "Reset automatico ogni 5 minuti",
+        "auto_reconnect": "Infinita con pause progressive",
+        "connection_timeout": 5,
+        "implementation": "AsyncMQTTClient migliorato"
+      }
+    }
+  },
+  "recommendations": [
+    {
+      "category": "MQTT",
+      "priority": "INFO",
+      "issue": "Sistema resiliente",
+      "solution": "Patch già applicata correttamente",
+      "action": "Nessuna azione richiesta"
+    },
+    {
+      "category": "HARDWARE",
+      "priority": "MEDIA",
+      "issue": "Doppio PN532 può causare problemi dopo power-cycle",
+      "solution": "Implementare reinizializzazione hardware robusta o usare lettori diversi",
+      "action": "Considerare MFRC522 per OUT o implementare recovery automatico"
+    },
+    {
+      "category": "SISTEMA",
+      "priority": "MEDIA",
+      "issue": "Sistema refactored meno resiliente del legacy in alcuni scenari",
+      "solution": "Implementare resilienza completa hardware + MQTT",
+      "action": "Applicare tutti i fix disponibili"
+    }
+  ]
+}
