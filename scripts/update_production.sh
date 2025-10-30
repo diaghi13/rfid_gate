@@ -85,7 +85,13 @@ create_backup() {
     echo "  🗂️ Backup codice sorgente..."
     sudo cp -r "$PROD_DIR/rfid_gate" "$BACKUP_DIR/" 2>/dev/null || true
     sudo cp "$PROD_DIR/main.py" "$BACKUP_DIR/" 2>/dev/null || true
-    sudo cp -r "$PROD_DIR/webui" "$BACKUP_DIR/" 2>/dev/null || true
+    
+    # Crea directory webui nel backup se necessario
+    sudo mkdir -p "$BACKUP_DIR/webui"
+    if [[ -d "$PROD_DIR/webui" ]]; then
+        sudo cp -r "$PROD_DIR/webui" "$BACKUP_DIR/" 2>/dev/null || true
+    fi
+    
     sudo cp -r "$PROD_DIR/tools" "$BACKUP_DIR/" 2>/dev/null || true
     echo "  ✅ Codice sorgente → $BACKUP_DIR/"
     
@@ -304,6 +310,9 @@ update_production() {
     
     # Aggiorna WebUI (preservando uploads e configurazioni)
     echo "  🌐 Aggiornamento WebUI..."
+    
+    # Assicurati che la directory webui esista
+    sudo mkdir -p "$PROD_DIR/webui"
     
     # File WebUI da aggiornare
     for file in app.py config_manager.py gunicorn.conf.py requirements.txt; do
