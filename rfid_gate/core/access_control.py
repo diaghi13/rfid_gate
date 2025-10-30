@@ -577,6 +577,12 @@ class AccessControlSystem:
                     metadata=card_event.metadata
                 )
                 
+                # 📡 MQTT parallelo per uscite (per notificare il server)
+                if (self.mode == SystemMode.ONLINE and self.config.auth.enabled and 
+                    self.mqtt_client and self.mqtt_client.is_connected()):
+                    await self._send_parallel_mqtt_logging(card_event)
+                    print(f"📡 USCITA: MQTT parallelo inviato per {card_event.uid_formatted}")
+                
                 return AccessDecision.GRANT
             
             # ============================================================================  
