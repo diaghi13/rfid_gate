@@ -9,8 +9,8 @@
 # - Repository: ~/rfid-gate (per sviluppo/pull)
 # - Produzione: /opt/rfid-gate (installazione con venv)
 #
-# Autore: Sistema RFID Gate v2.0.0
-# Data: 16 ottobre 2025
+# Autore: Sistema RFID Gate v2.2.1
+# Data: 30 ottobre 2025
 
 set -e  # Exit on any error
 
