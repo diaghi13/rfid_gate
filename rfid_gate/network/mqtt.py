@@ -285,7 +285,15 @@ class AsyncMQTTClient:
         self._reconnect_task: Optional[asyncio.Task] = None
         self._queue_processor_task: Optional[asyncio.Task] = None
         self._retry_processor_task: Optional[Union[asyncio.Task, asyncio.Future]] = None  # ✨ Task o Future retry
+        self._heartbeat_task: Optional[asyncio.Task] = None  # 🔧 NUOVO: Task heartbeat
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None  # ✨ Riferimento al loop
+        
+        # Health check and ping
+        self.heartbeat_interval = 30.0  # 🔧 NUOVO: ping ogni 30 secondi
+        self.last_ping_time = 0
+        self.ping_timeout = 10.0  # 🔧 NUOVO: timeout ping
+        self.missed_pings = 0
+        self.max_missed_pings = 3  # 🔧 NUOVO: max ping mancati prima disconnessione
         
         # Statistics
         self.stats = {
@@ -336,6 +344,9 @@ class AsyncMQTTClient:
             
             # Avvia task per processing coda
             self._queue_processor_task = asyncio.create_task(self._process_queue())
+            
+            # 🔧 NUOVO: Avvia heartbeat monitor
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_monitor())
             
             print("✅ Client MQTT inizializzato")
             return True
@@ -517,6 +528,69 @@ class AsyncMQTTClient:
             except Exception as e:
                 print(f"❌ Errore riconnessione: {e}")
                 await asyncio.sleep(self.reconnect_delay)
+    
+    async def _heartbeat_monitor(self):
+        """
+        🔧 NUOVO: Monitor heartbeat per rilevare connessioni passive morte.
+        Invia ping periodico e rileva se la connessione è ancora attiva.
+        """
+        while True:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+                
+                if self.state == ConnectionState.CONNECTED and self.client:
+                    current_time = time.time()
+                    
+                    # Controlla se è il momento di inviare un ping
+                    if (current_time - self.last_ping_time) >= self.heartbeat_interval:
+                        print(f"💓 MQTT ping check...")
+                        
+                        # Invia un ping (publish su topic speciale o usa keep-alive interno)
+                        try:
+                            # Usa metodo interno per verificare se socket è ancora attivo
+                            if hasattr(self.client, '_sock') and self.client._sock:
+                                # Test connessione con un piccolo publish
+                                test_payload = {"ping": current_time, "from": "rfid_gate"}
+                                result = self.client.publish("rfid_gate/heartbeat", json.dumps(test_payload), qos=0)
+                                
+                                if result.rc == 0:
+                                    self.last_ping_time = current_time
+                                    self.missed_pings = 0
+                                    print(f"💓 MQTT ping OK")
+                                else:
+                                    self.missed_pings += 1
+                                    print(f"⚠️ MQTT ping fallito: rc={result.rc} (missed: {self.missed_pings}/{self.max_missed_pings})")
+                            else:
+                                # Socket non disponibile
+                                self.missed_pings += 1
+                                print(f"⚠️ MQTT socket non disponibile (missed: {self.missed_pings}/{self.max_missed_pings})")
+                        
+                        except Exception as ping_error:
+                            self.missed_pings += 1
+                            print(f"❌ MQTT ping error: {ping_error} (missed: {self.missed_pings}/{self.max_missed_pings})")
+                        
+                        # Se troppi ping mancati, forza disconnessione
+                        if self.missed_pings >= self.max_missed_pings:
+                            print(f"💔 MQTT connessione morta rilevata! Forzo disconnessione...")
+                            self.state = ConnectionState.DISCONNECTED
+                            
+                            # Forza disconnessione del client
+                            if self.client:
+                                try:
+                                    self.client.disconnect()
+                                except:
+                                    pass
+                            
+                            # Avvia riconnessione se non già attiva
+                            if not self._reconnect_task or self._reconnect_task.done():
+                                self._reconnect_task = asyncio.create_task(self._auto_reconnect())
+                                
+            except asyncio.CancelledError:
+                print("🛑 Heartbeat monitor fermato")
+                break
+            except Exception as e:
+                print(f"❌ Errore heartbeat monitor: {e}")
+                await asyncio.sleep(5)  # Breve pausa in caso di errore
     
     async def _process_queue(self):
         """Processore coda messaggi"""
@@ -861,6 +935,10 @@ class AsyncMQTTClient:
             # ✨ Cancella retry processor task
             if self._retry_processor_task and not self._retry_processor_task.done():
                 self._retry_processor_task.cancel()
+            
+            # 🔧 NUOVO: Cancella heartbeat task
+            if self._heartbeat_task and not self._heartbeat_task.done():
+                self._heartbeat_task.cancel()
             
             # Disconnetti client
             if self.client:
