@@ -320,6 +320,9 @@ class AsyncMQTTClient:
         try:
             print("🌐 Inizializzazione client MQTT...")
             
+            # 🔧 NUOVO: Cattura event loop corrente per thread-safety
+            self._event_loop = asyncio.get_running_loop()
+            
             # Crea client
             self.client = mqtt.Client()
             
@@ -445,9 +448,21 @@ class AsyncMQTTClient:
         self.state = ConnectionState.DISCONNECTED
         print(f"🔌 MQTT disconnesso (rc: {rc})")
         
-        # Avvia riconnessione automatica
-        if not self._reconnect_task or self._reconnect_task.done():
-            self._reconnect_task = asyncio.create_task(self._auto_reconnect())
+        # 🔧 FIX: Avvia riconnessione automatica in modo thread-safe
+        if self._event_loop and not self._event_loop.is_closed():
+            # Siamo in un thread diverso, quindi usiamo call_soon_threadsafe
+            if not self._reconnect_task or self._reconnect_task.done():
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._auto_reconnect(), 
+                        self._event_loop
+                    )
+                    self._reconnect_task = future
+                    print("🔄 Riconnessione automatica avviata (thread-safe)")
+                except Exception as e:
+                    print(f"❌ Errore avvio riconnessione thread-safe: {e}")
+        else:
+            print("⚠️ Event loop non disponibile per riconnessione automatica")
         
         # Callback utente
         if self.on_disconnected:
@@ -500,34 +515,41 @@ class AsyncMQTTClient:
             print(f"❌ Errore gestione auth response: {e}")
     
     async def _auto_reconnect(self):
-        """Riconnessione automatica migliorata"""
-        while self.state == ConnectionState.DISCONNECTED:
-            try:
-                await asyncio.sleep(self.reconnect_delay)
-                
-                # 🔧 Reset tentativi se sono passati più di 5 minuti dall'ultima connessione
-                if (time.time() - self.last_connection_time) > self.connection_reset_interval:
-                    if self.connection_attempts >= self.max_retries:
-                        print(f"🔄 Reset tentativi riconnessione dopo {self.connection_reset_interval}s")
-                        self.connection_attempts = 0
-                
-                if self.connection_attempts < self.max_retries:
-                    print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}/{self.max_retries}")
-                    success = await self.connect()
+        """Riconnessione automatica migliorata - Thread-safe"""
+        try:
+            while self.state == ConnectionState.DISCONNECTED:
+                try:
+                    await asyncio.sleep(self.reconnect_delay)
                     
-                    if success:
-                        self.stats['reconnections'] += 1
-                        break
-                else:
-                    print(f"❌ Max tentativi riconnessione raggiunti ({self.max_retries})")
-                    print(f"⏱️ Attendo {self.connection_reset_interval}s prima del reset...")
-                    await asyncio.sleep(self.connection_reset_interval)
-                    self.connection_attempts = 0  # 🔧 Reset per riprovare
-                    print("🔄 Reset tentativi completato, riprovo...")
+                    # 🔧 Reset tentativi se sono passati più di 5 minuti dall'ultima connessione
+                    if (time.time() - self.last_connection_time) > self.connection_reset_interval:
+                        if self.connection_attempts >= self.max_retries:
+                            print(f"🔄 Reset tentativi riconnessione dopo {self.connection_reset_interval}s")
+                            self.connection_attempts = 0
                     
-            except Exception as e:
-                print(f"❌ Errore riconnessione: {e}")
-                await asyncio.sleep(self.reconnect_delay)
+                    if self.connection_attempts < self.max_retries:
+                        print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}/{self.max_retries}")
+                        success = await self.connect()
+                        
+                        if success:
+                            self.stats['reconnections'] += 1
+                            print("✅ Riconnessione automatica riuscita!")
+                            break
+                    else:
+                        print(f"❌ Max tentativi riconnessione raggiunti ({self.max_retries})")
+                        print(f"⏱️ Attendo {self.connection_reset_interval}s prima del reset...")
+                        await asyncio.sleep(self.connection_reset_interval)
+                        self.connection_attempts = 0  # 🔧 Reset per riprovare
+                        print("🔄 Reset tentativi completato, riprovo...")
+                        
+                except Exception as e:
+                    print(f"❌ Errore riconnessione: {e}")
+                    await asyncio.sleep(self.reconnect_delay)
+                    
+        except asyncio.CancelledError:
+            print("🛑 Riconnessione automatica cancellata")
+        except Exception as e:
+            print(f"❌ Errore critico riconnessione automatica: {e}")
     
     async def _heartbeat_monitor(self):
         """
