@@ -7,6 +7,37 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2025-10-31
+
+### 🔧 Fixed
+
+- **CRITICAL**: Fixed MQTT subscription persistence after broker reconnection
+- Badge requests now properly received after broker restart
+- Enhanced auth response callback handling for legacy topic formats
+- Improved `_on_message` topic detection: `'response' in topic AND 'tornello' in topic`
+
+### ✨ Added
+
+- `_ensure_subscriptions_active()` method for post-connection verification
+- Enhanced subscription restoration after automatic reconnection
+- Comprehensive subscription persistence test (`test_subscription_persistence.py`)
+- Better topic pattern recognition for legacy formats
+
+### 🛠️ Improved
+
+- More robust subscription restoration process
+- Enhanced callback triggering for `gate/*/response` topics
+- Added detailed logging for subscription setup and verification
+- Production tested: both heartbeat and badge requests functional after broker restart
+
+### 📦 Deployment
+
+- Ready for immediate production deployment
+- Backward compatible with existing configurations
+- No breaking changes to API or configuration format
+
+## [Unreleased - Archive]
+
 ### Added
 
 - Sistema di riorganizzazione file progetto
