@@ -1119,11 +1119,39 @@ class AccessControlSystem:
     
     def _on_mqtt_connected(self):
         """Callback MQTT connesso"""
-        asyncio.create_task(self._set_mode(SystemMode.ONLINE))
+        try:
+            loop = asyncio.get_event_loop()
+            if loop and loop.is_running():
+                # Schedule in event loop se disponibile
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._set_mode(SystemMode.ONLINE))
+                )
+            else:
+                # Fallback sincrono
+                self.mode = SystemMode.ONLINE
+                print("🔗 Sistema: ONLINE (fallback)")
+        except Exception as e:
+            # Fallback sincrono in caso di errore
+            self.mode = SystemMode.ONLINE
+            print(f"🔗 Sistema: ONLINE (fallback - errore: {e})")
     
     def _on_mqtt_disconnected(self):
         """Callback MQTT disconnesso"""
-        asyncio.create_task(self._set_mode(SystemMode.OFFLINE))
+        try:
+            loop = asyncio.get_event_loop()
+            if loop and loop.is_running():
+                # Schedule in event loop se disponibile
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._set_mode(SystemMode.OFFLINE))
+                )
+            else:
+                # Fallback sincrono
+                self.mode = SystemMode.OFFLINE
+                print("📴 Sistema: OFFLINE (fallback)")
+        except Exception as e:
+            # Fallback sincrono in caso di errore
+            self.mode = SystemMode.OFFLINE
+            print(f"📴 Sistema: OFFLINE (fallback - errore: {e})")
     
     def _on_auth_response(self, request_id: str, response: Dict[str, Any]):
         """Callback risposta autenticazione"""
