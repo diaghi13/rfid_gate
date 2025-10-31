@@ -89,21 +89,37 @@ cd rfid_gate
 git checkout v2.2.1
 echo -e "${GREEN}✅ v2.2.1 scaricata${NC}"
 
-# Ripristina configurazione
-BACKUP_DIR="${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
-if [ -f "$BACKUP_DIR/.env" ]; then
+# Ripristina configurazione - FIX: cerca backup prima del move
+BACKUP_ENV_FILE=""
+for backup_dir in "/home/$CURRENT_USER"/rfid_gate_backup_*; do
+    if [ -f "$backup_dir/.env" ]; then
+        BACKUP_ENV_FILE="$backup_dir/.env"
+        break
+    fi
+done
+
+if [ -n "$BACKUP_ENV_FILE" ] && [ -f "$BACKUP_ENV_FILE" ]; then
     echo -e "${BLUE}🔄 Ripristino configurazione...${NC}"
-    cp "$BACKUP_DIR/.env" "$INSTALL_DIR/.env"
-    echo -e "${GREEN}✅ Configurazione ripristinata${NC}"
+    cp "$BACKUP_ENV_FILE" "$INSTALL_DIR/.env"
+    echo -e "${GREEN}✅ Configurazione ripristinata da: $BACKUP_ENV_FILE${NC}"
 else
     echo -e "${YELLOW}⚠️ Nessuna configurazione precedente trovata${NC}"
     echo -e "${YELLOW}   Copia manualmente il file .env${NC}"
 fi
 
-# Installa dipendenze
+# Installa dipendenze - FIX: gestisce environment externally managed
 echo -e "${BLUE}📦 Installazione dipendenze...${NC}"
-pip3 install -r requirements.txt
-echo -e "${GREEN}✅ Dipendenze installate${NC}"
+if pip3 install -r requirements.txt 2>/dev/null; then
+    echo -e "${GREEN}✅ Dipendenze installate${NC}"
+else
+    echo -e "${YELLOW}⚠️ Environment externally managed, provo con --break-system-packages...${NC}"
+    if pip3 install --break-system-packages -r requirements.txt; then
+        echo -e "${GREEN}✅ Dipendenze installate (break-system-packages)${NC}"
+    else
+        echo -e "${RED}❌ Errore installazione dipendenze${NC}"
+        echo -e "${YELLOW}   Prova manualmente: pip3 install --break-system-packages -r requirements.txt${NC}"
+    fi
+fi
 
 # Test rapido connessione MQTT
 echo -e "${BLUE}🧪 Test rapido sistema...${NC}"
