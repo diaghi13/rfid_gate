@@ -393,6 +393,9 @@ class AsyncMQTTClient:
             # Attendi connessione con timeout
             for _ in range(50):  # 5 secondi max
                 if self.state == ConnectionState.CONNECTED:
+                    # 🔧 NUOVO: Verifica e forza subscription dopo connessione
+                    await asyncio.sleep(0.5)  # Pausa per stabilizzare connessione
+                    await self._ensure_subscriptions_active()
                     return True
                 await asyncio.sleep(0.1)
             
@@ -412,14 +415,8 @@ class AsyncMQTTClient:
             self.last_connection_time = time.time()  # 🔧 Registra timestamp connessione
             print("✅ MQTT connesso")
             
-            # Subscribe ai topic necessari
-            auth_topic = f"gate/+/{self.config.auth_response_topic.split('/')[-1]}"
-            manual_topic = f"gate/+/manual_open"
-            
-            client.subscribe(auth_topic)
-            client.subscribe(manual_topic)
-            
-            print(f"📧 Sottoscritto a: {auth_topic}, {manual_topic}")
+            # 🔧 NUOVO: Esegui subscription sempre dopo connessione
+            self._setup_subscriptions()
             
             # ✨ Avvia retry processor se abilitato e non già attivo
             if (getattr(self.config, 'enable_retry_queue', True) and 
@@ -442,6 +439,65 @@ class AsyncMQTTClient:
         else:
             self.state = ConnectionState.ERROR
             print(f"❌ Connessione MQTT fallita: {rc}")
+    
+    def _setup_subscriptions(self):
+        """🔧 NUOVO: Configura subscription MQTT (chiamato sempre dopo connessione)"""
+        try:
+            if not self.client:
+                print("⚠️ Client MQTT non disponibile per subscription")
+                return
+            
+            # Topic per auth response
+            if self.config.auth_response_topic:
+                auth_topic = f"gate/+/{self.config.auth_response_topic.split('/')[-1]}"
+                result = self.client.subscribe(auth_topic)
+                print(f"📧 Subscribe auth_response: {auth_topic} (rc: {result[0]})")
+            
+            # Topic per manual open
+            manual_topic = f"gate/+/manual_open"
+            result = self.client.subscribe(manual_topic)
+            print(f"📧 Subscribe manual_open: {manual_topic} (rc: {result[0]})")
+            
+            # 🔧 NUOVO: Subscribe anche al nostro topic heartbeat per debug
+            heartbeat_topic = "rfid_gate/heartbeat"
+            result = self.client.subscribe(heartbeat_topic)
+            print(f"📧 Subscribe heartbeat: {heartbeat_topic} (rc: {result[0]})")
+            
+            print("✅ Subscription configurate")
+            
+        except Exception as e:
+            print(f"❌ Errore configurazione subscription: {e}")
+    
+    async def _ensure_subscriptions_active(self):
+        """🔧 NUOVO: Assicura che le subscription siano attive dopo riconnessione"""
+        try:
+            if not self.client or not self.is_connected():
+                print("⚠️ Client non connesso per verifica subscription")
+                return
+            
+            print("🔍 Verifica subscription post-connessione...")
+            
+            # Aspetta un po' per stabilizzare la connessione
+            await asyncio.sleep(1)
+            
+            # Forza re-subscription (in caso il callback _on_connect non sia stato chiamato)
+            if hasattr(self.client, '_subscriptions'):
+                current_subs = self.client._subscriptions or {}
+                print(f"📊 Subscription attive: {len(current_subs)}")
+                
+                if len(current_subs) == 0:
+                    print("⚠️ Nessuna subscription attiva! Forzo re-subscription...")
+                    self._setup_subscriptions()
+                else:
+                    print("✅ Subscription presenti:")
+                    for topic in current_subs.keys():
+                        print(f"   - {topic}")
+            else:
+                print("⚠️ Impossibile verificare subscription, forzo setup...")
+                self._setup_subscriptions()
+                
+        except Exception as e:
+            print(f"❌ Errore verifica subscription: {e}")
     
     def _on_disconnect(self, client, userdata, rc):
         """Callback disconnessione MQTT"""
@@ -481,9 +537,15 @@ class AsyncMQTTClient:
             
             print(f"📨 MQTT ricevuto: {topic}")
             
-            # Gestione auth response
-            if 'auth_response' in topic:
+            # Gestione auth response - controllo più flessibile
+            if ('response' in topic or 'auth_response' in topic) and 'tornello' in topic:
+                print(f"🔐 AUTH RESPONSE rilevata: {topic}")
                 self._handle_auth_response(payload)
+                if self.on_auth_response:
+                    try:
+                        self.on_auth_response(topic, payload)
+                    except Exception as e:
+                        print(f"❌ Errore callback auth_response: {e}")
             
             # Callback utente
             if self.on_message:
