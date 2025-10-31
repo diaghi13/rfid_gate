@@ -22,26 +22,16 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
-# Verifica permessi directory
-echo -e "${BLUE}🔍 Verifica permessi...${NC}"
-INSTALL_DIR="/home/pi/rfid_gate"
+# Configurazione - RIPRISTINA LOGICA ORIGINALE
+INSTALL_DIR="/opt/rfid-gate"          # Directory di installazione sistema (dove rimane tutto)
+DOWNLOAD_DIR="/tmp/rfid-gate-deploy"  # Directory temporanea per download
 CURRENT_USER=$(whoami)
 
-# Verifica se siamo l'utente pi
-if [[ "$CURRENT_USER" != "pi" ]]; then
-    echo -e "${YELLOW}⚠️  Script progettato per utente 'pi', attuale: $CURRENT_USER${NC}"
-    echo -e "${YELLOW}   Continuando con directory: /home/$CURRENT_USER/rfid_gate${NC}"
-    INSTALL_DIR="/home/$CURRENT_USER/rfid_gate"
-fi
-
-# Verifica permessi scrittura nella home directory
-if [[ ! -w "/home/$CURRENT_USER" ]]; then
-    echo -e "${RED}❌ Nessun permesso di scrittura in /home/$CURRENT_USER${NC}"
-    echo -e "${YELLOW}   Prova: sudo chown -R $CURRENT_USER:$CURRENT_USER /home/$CURRENT_USER${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Permessi verificati - Directory: $INSTALL_DIR${NC}"
+echo -e "${BLUE}📋 Directory Deployment:${NC}"
+echo -e "   📁 Installazione: ${INSTALL_DIR}"
+echo -e "   📥 Download temp: ${DOWNLOAD_DIR}"
+echo -e "   👤 Utente: ${CURRENT_USER}"
+echo ""
 
 # Verifica sistema
 echo -e "${BLUE}🔍 Verifica sistema...${NC}"
@@ -58,13 +48,6 @@ fi
 echo -e "${GREEN}✅ Sistema verificato${NC}"
 echo ""
 
-# Backup configurazione esistente
-echo -e "${BLUE}💾 Backup configurazione esistente...${NC}"
-if [ -f "$INSTALL_DIR/.env" ]; then
-    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup.$(date +%Y%m%d_%H%M%S)"
-    echo -e "${GREEN}✅ Backup .env creato${NC}"
-fi
-
 # Ferma servizio esistente se attivo
 echo -e "${BLUE}🛑 Ferma servizio esistente...${NC}"
 if systemctl is-active --quiet rfid-gate; then
@@ -74,41 +57,82 @@ else
     echo -e "${YELLOW}ℹ️ Servizio non attivo${NC}"
 fi
 
-# Backup directory esistente
-if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${BLUE}📦 Backup directory esistente...${NC}"
-    sudo mv "$INSTALL_DIR" "${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
-    echo -e "${GREEN}✅ Backup completato${NC}"
+# Pulisci directory temporanea se esiste
+if [ -d "$DOWNLOAD_DIR" ]; then
+    echo -e "${BLUE}🧹 Pulizia directory temporanea...${NC}"
+    rm -rf "$DOWNLOAD_DIR"
 fi
 
-# Clone repository
+# Clone repository nella directory temporanea
 echo -e "${BLUE}📥 Download v2.2.1...${NC}"
-cd "/home/$CURRENT_USER"
-git clone https://github.com/diaghi13/rfid_gate.git
-cd rfid_gate
+mkdir -p "$DOWNLOAD_DIR"
+cd "$DOWNLOAD_DIR"
+git clone https://github.com/diaghi13/rfid_gate.git .
 git checkout v2.2.1
-echo -e "${GREEN}✅ v2.2.1 scaricata${NC}"
+echo -e "${GREEN}✅ v2.2.1 scaricata in $DOWNLOAD_DIR${NC}"
 
-# Ripristina configurazione - FIX: cerca backup prima del move
-BACKUP_ENV_FILE=""
-for backup_dir in "/home/$CURRENT_USER"/rfid_gate_backup_*; do
-    if [ -f "$backup_dir/.env" ]; then
-        BACKUP_ENV_FILE="$backup_dir/.env"
-        break
+# Crea directory di installazione se non esiste
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo -e "${BLUE}📁 Creazione directory installazione...${NC}"
+    sudo mkdir -p "$INSTALL_DIR"
+    sudo chown "$CURRENT_USER:$CURRENT_USER" "$INSTALL_DIR"
+    echo -e "${GREEN}✅ Directory $INSTALL_DIR creata${NC}"
+fi
+
+# Backup configurazione esistente (mantiene .env, logs, cache)
+echo -e "${BLUE}💾 Backup configurazione esistente...${NC}"
+BACKUP_DIR="$INSTALL_DIR/backup_$(date +%Y%m%d_%H%M%S)"
+if [ -f "$INSTALL_DIR/.env" ] || [ -d "$INSTALL_DIR/logs" ] || [ -d "$INSTALL_DIR/cache" ]; then
+    sudo mkdir -p "$BACKUP_DIR"
+    
+    # Backup .env
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        sudo cp "$INSTALL_DIR/.env" "$BACKUP_DIR/.env"
+        echo -e "${GREEN}✅ File .env salvato${NC}"
     fi
-done
-
-if [ -n "$BACKUP_ENV_FILE" ] && [ -f "$BACKUP_ENV_FILE" ]; then
-    echo -e "${BLUE}🔄 Ripristino configurazione...${NC}"
-    cp "$BACKUP_ENV_FILE" "$INSTALL_DIR/.env"
-    echo -e "${GREEN}✅ Configurazione ripristinata da: $BACKUP_ENV_FILE${NC}"
+    
+    # Backup logs
+    if [ -d "$INSTALL_DIR/logs" ]; then
+        sudo cp -r "$INSTALL_DIR/logs" "$BACKUP_DIR/logs"
+        echo -e "${GREEN}✅ Directory logs salvata${NC}"
+    fi
+    
+    # Backup cache
+    if [ -d "$INSTALL_DIR/cache" ]; then
+        sudo cp -r "$INSTALL_DIR/cache" "$BACKUP_DIR/cache"
+        echo -e "${GREEN}✅ Cache salvata${NC}"
+    fi
+    
+    echo -e "${GREEN}✅ Backup completato in: $BACKUP_DIR${NC}"
 else
-    echo -e "${YELLOW}⚠️ Nessuna configurazione precedente trovata${NC}"
-    echo -e "${YELLOW}   Copia manualmente il file .env${NC}"
+    echo -e "${YELLOW}ℹ️ Nessuna configurazione esistente da salvare${NC}"
+fi
+
+# Copia nuovi file (sovrascrive tutto tranne config/logs/cache)
+echo -e "${BLUE}📋 Aggiornamento file sistema...${NC}"
+sudo cp -r "$DOWNLOAD_DIR"/* "$INSTALL_DIR/"
+sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$INSTALL_DIR"
+
+# Ripristina configurazione salvata
+if [ -f "$BACKUP_DIR/.env" ]; then
+    echo -e "${BLUE}🔄 Ripristino configurazione...${NC}"
+    cp "$BACKUP_DIR/.env" "$INSTALL_DIR/.env"
+    echo -e "${GREEN}✅ Configurazione ripristinata${NC}"
+fi
+
+if [ -d "$BACKUP_DIR/logs" ]; then
+    cp -r "$BACKUP_DIR/logs" "$INSTALL_DIR/logs"
+    echo -e "${GREEN}✅ Logs ripristinati${NC}"
+fi
+
+if [ -d "$BACKUP_DIR/cache" ]; then
+    cp -r "$BACKUP_DIR/cache" "$INSTALL_DIR/cache"
+    echo -e "${GREEN}✅ Cache ripristinata${NC}"
 fi
 
 # Installa dipendenze - FIX: gestisce environment externally managed
 echo -e "${BLUE}📦 Installazione dipendenze...${NC}"
+cd "$INSTALL_DIR"
 if pip3 install -r requirements.txt 2>/dev/null; then
     echo -e "${GREEN}✅ Dipendenze installate${NC}"
 else
@@ -169,6 +193,11 @@ fi
 echo -e "${BLUE}🔍 Verifica finale...${NC}"
 sleep 5
 
+# Pulizia directory temporanea
+echo -e "${BLUE}🧹 Pulizia directory temporanea...${NC}"
+rm -rf "$DOWNLOAD_DIR"
+echo -e "${GREEN}✅ Directory temporanea rimossa${NC}"
+
 echo ""
 echo -e "${GREEN}🎉 DEPLOYMENT v2.2.1 COMPLETATO!${NC}"
 echo -e "${GREEN}===================================${NC}"
@@ -177,6 +206,11 @@ echo -e "${YELLOW}🔧 PROBLEMA RISOLTO:${NC}"
 echo -e "   ✅ Subscription MQTT persistenti dopo riconnessione broker"
 echo -e "   ✅ Badge requests ora arrivano correttamente dopo restart broker" 
 echo -e "   ✅ Heartbeat e auth responses entrambi funzionali"
+echo ""
+echo -e "${YELLOW}📁 Directory Sistema:${NC}"
+echo -e "   📋 Installazione: $INSTALL_DIR"
+echo -e "   💾 Backup: $BACKUP_DIR"
+echo -e "   ⚙️  Configurazione: $INSTALL_DIR/.env"
 echo ""
 echo -e "${YELLOW}📊 Per monitorare:${NC}"
 echo -e "   sudo journalctl -u rfid-gate -f"
