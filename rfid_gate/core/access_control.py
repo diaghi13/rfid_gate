@@ -786,11 +786,14 @@ class AccessControlSystem:
                         reader_type=card_event.reader_type,
                         metadata=card_event.metadata
                     )
+                    # � In modalità offline: solo cache, MQTT verrà inviato quando torna online
                 
                 return decision
             
             # Nessuna autenticazione disponibile
             else:
+                print("❌ Nessuna autenticazione disponibile")
+                await self._log_denied_access(card_event, "Nessuna autenticazione disponibile", source="system")
                 return AccessDecision.DENY
                 
         except Exception as e:
@@ -897,6 +900,10 @@ class AccessControlSystem:
                 reader_type=card_event.reader_type,
                 metadata=card_event.metadata
             )
+            
+            # 📡 AGGIUNTA: Invia anche MQTT per accessi negati
+            await self._send_parallel_mqtt_logging(card_event)
+            
             print(f"📝 Log negato: {card_event.uid_formatted} ({source}) - {reason}")
             
         except Exception as e:
