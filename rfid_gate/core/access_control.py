@@ -1016,7 +1016,15 @@ class AccessControlSystem:
         try:
             relay = self.relays.get(direction)
             if relay:
-                success = await relay.activate(trigger_source="card_auth")
+                # 🔧 WORKAROUND: Il patch Independent Relay rende activate() non-async
+                # Controlliamo se è stato applicato il patch
+                if hasattr(relay.activate, '__name__') and 'new_activate' in str(relay.activate):
+                    # Metodo patched - chiamata sincrona
+                    success = relay.activate(trigger_source="card_auth")
+                else:
+                    # Metodo originale - chiamata async
+                    success = await relay.activate(trigger_source="card_auth")
+                
                 if success:
                     print(f"🚪 Apertura {direction} attivata")
                 else:
@@ -1187,7 +1195,15 @@ class AccessControlSystem:
                 print(f"❌ Relè {direction} non trovato")
                 return False
             
-            success = await relay.activate(duration, trigger_source="manual")
+            # 🔧 WORKAROUND: Il patch Independent Relay rende activate() non-async
+            # Controlliamo se è stato applicato il patch
+            if hasattr(relay.activate, '__name__') and 'new_activate' in str(relay.activate):
+                # Metodo patched - chiamata sincrona
+                success = relay.activate(duration, trigger_source="manual")
+            else:
+                # Metodo originale - chiamata async
+                success = await relay.activate(duration, trigger_source="manual")
+            
             if success:
                 print(f"🔓 Apertura manuale {direction} attivata")
             

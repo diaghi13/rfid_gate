@@ -21,6 +21,9 @@ def patch_relay_activate_method():
         """
         Nuovo metodo activate con thread completamente indipendente.
         
+        🔧 IMPORTANTE: Manteniamo sync per compatibilità con il patch,
+        ma il chiamante deve fare await per mantenere compatibilità API.
+        
         Thread che si autogestisce:
         1. Attiva relay immediatamente
         2. Aspetta durata con time.sleep()
