@@ -22,6 +22,27 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
+# Verifica permessi directory
+echo -e "${BLUE}🔍 Verifica permessi...${NC}"
+INSTALL_DIR="/home/pi/rfid_gate"
+CURRENT_USER=$(whoami)
+
+# Verifica se siamo l'utente pi
+if [[ "$CURRENT_USER" != "pi" ]]; then
+    echo -e "${YELLOW}⚠️  Script progettato per utente 'pi', attuale: $CURRENT_USER${NC}"
+    echo -e "${YELLOW}   Continuando con directory: /home/$CURRENT_USER/rfid_gate${NC}"
+    INSTALL_DIR="/home/$CURRENT_USER/rfid_gate"
+fi
+
+# Verifica permessi scrittura nella home directory
+if [[ ! -w "/home/$CURRENT_USER" ]]; then
+    echo -e "${RED}❌ Nessun permesso di scrittura in /home/$CURRENT_USER${NC}"
+    echo -e "${YELLOW}   Prova: sudo chown -R $CURRENT_USER:$CURRENT_USER /home/$CURRENT_USER${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Permessi verificati - Directory: $INSTALL_DIR${NC}"
+
 # Verifica sistema
 echo -e "${BLUE}🔍 Verifica sistema...${NC}"
 if ! command -v python3 &> /dev/null; then
@@ -39,8 +60,8 @@ echo ""
 
 # Backup configurazione esistente
 echo -e "${BLUE}💾 Backup configurazione esistente...${NC}"
-if [ -f "/home/pi/rfid_gate/.env" ]; then
-    cp /home/pi/rfid_gate/.env /home/pi/rfid_gate/.env.backup.$(date +%Y%m%d_%H%M%S)
+if [ -f "$INSTALL_DIR/.env" ]; then
+    cp "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup.$(date +%Y%m%d_%H%M%S)"
     echo -e "${GREEN}✅ Backup .env creato${NC}"
 fi
 
@@ -54,24 +75,25 @@ else
 fi
 
 # Backup directory esistente
-if [ -d "/home/pi/rfid_gate" ]; then
+if [ -d "$INSTALL_DIR" ]; then
     echo -e "${BLUE}📦 Backup directory esistente...${NC}"
-    sudo mv /home/pi/rfid_gate /home/pi/rfid_gate_backup_$(date +%Y%m%d_%H%M%S)
+    sudo mv "$INSTALL_DIR" "${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
     echo -e "${GREEN}✅ Backup completato${NC}"
 fi
 
 # Clone repository
 echo -e "${BLUE}📥 Download v2.2.1...${NC}"
-cd /home/pi
+cd "/home/$CURRENT_USER"
 git clone https://github.com/diaghi13/rfid_gate.git
 cd rfid_gate
 git checkout v2.2.1
 echo -e "${GREEN}✅ v2.2.1 scaricata${NC}"
 
 # Ripristina configurazione
-if [ -f "/home/pi/rfid_gate_backup_$(date +%Y%m%d_%H%M%S)/.env" ]; then
+BACKUP_DIR="${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+if [ -f "$BACKUP_DIR/.env" ]; then
     echo -e "${BLUE}🔄 Ripristino configurazione...${NC}"
-    cp /home/pi/rfid_gate_backup_*/.env /home/pi/rfid_gate/.env
+    cp "$BACKUP_DIR/.env" "$INSTALL_DIR/.env"
     echo -e "${GREEN}✅ Configurazione ripristinata${NC}"
 else
     echo -e "${YELLOW}⚠️ Nessuna configurazione precedente trovata${NC}"
@@ -85,7 +107,7 @@ echo -e "${GREEN}✅ Dipendenze installate${NC}"
 
 # Test rapido connessione MQTT
 echo -e "${BLUE}🧪 Test rapido sistema...${NC}"
-cd /home/pi/rfid_gate
+cd "$INSTALL_DIR"
 if python3 -c "
 import sys
 sys.path.append('.')
@@ -145,7 +167,7 @@ echo -e "   sudo journalctl -u rfid-gate -f"
 echo -e "   sudo systemctl status rfid-gate"
 echo ""
 echo -e "${YELLOW}🧪 Per testare subscription persistence:${NC}"
-echo -e "   cd /home/pi/rfid_gate"
+echo -e "   cd $INSTALL_DIR"
 echo -e "   python3 test_subscription_persistence.py"
 echo ""
 echo -e "${GREEN}🚀 Sistema pronto per la produzione!${NC}"
