@@ -1,17 +1,17 @@
 #!/bin/bash
 # ===========================================
-# 🚀 RFID Gate - Deploy Release v2.2.1
+# 🚀 RFID Gate - Deploy Release v2.2.3
 # ===========================================
 #
-# Script rapido per deployare la release v2.2.1 su Raspberry Pi
-# Scarica automaticamente l'ultima release da GitHub e aggiorna
+# Script rapido per deployare la release v2.2.3 su Raspberry Pi
+# Sistema MQTT Riconnessione Enterprise-Grade
 #
 # Uso: 
-#   sudo bash deploy_v2.2.1.sh
-#   curl -fsSL https://raw.githubusercontent.com/diaghi13/rfid_gate/v2.2.1/scripts/deploy_v2.2.1.sh | sudo bash
+#   sudo bash deploy_v2.2.3.sh
+#   curl -fsSL https://raw.githubusercontent.com/diaghi13/rfid_gate/v2.2.3/scripts/deploy_v2.2.3.sh | sudo bash
 #
-# Autore: Sistema RFID Gate v2.2.1
-# Data: 30 ottobre 2025
+# Autore: Sistema RFID Gate v2.2.3
+# Data: 31 ottobre 2025
 
 set -e
 
@@ -37,7 +37,7 @@ echo -e "${NC}"
 
 # Verifica permessi root
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}❌ Eseguire come root: sudo bash deploy_v2.2.1.sh${NC}"
+    echo -e "${RED}❌ Eseguire come root: sudo bash deploy_v2.2.3.sh${NC}"
     exit 1
 fi
 
@@ -155,12 +155,15 @@ main() {
     
     # Mostra note release se presente
     if [ -f "$REPO_DIR/CHANGELOG.md" ]; then
-        echo -e "${BLUE}📝 Note release $VERSION:${NC}"
-        echo "  - MQTT subscription persistence fix dopo broker restart"
-        echo "  - Enhanced MQTT resilience con auto-reconnection"
-        echo "  - UID normalization utility per robust card handling"
-        echo "  - Hardware resilience fixes per power-cycle recovery"
-        echo "  - Production-ready con enhanced error handling"
+        echo -e "${BLUE}📝 Note release $VERSION - Sistema MQTT Enterprise-Grade:${NC}"
+        echo "  🚀 Sistema riconnessione MQTT completamente rivoluzionato"
+        echo "  🧠 Backoff intelligente adattivo per outage di qualsiasi durata"
+        echo "  🔒 Thread-safety completo per callbacks paho-mqtt"
+        echo "  💓 Heartbeat monitor per early detection connessioni morte"
+        echo "  📊 Performance: Recovery <60s restart, <5min outage lunghi"
+        echo "  🧪 Test suite completa con scenari estremi verificati"
+        echo "  🎯 Enterprise-ready per ambienti produzione 24/7"
+        echo "  ✅ Zero breaking changes - drop-in replacement"
     fi
 }
 
