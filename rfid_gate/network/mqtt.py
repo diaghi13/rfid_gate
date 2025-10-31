@@ -500,25 +500,31 @@ class AsyncMQTTClient:
             print(f"❌ Errore verifica subscription: {e}")
     
     def _on_disconnect(self, client, userdata, rc):
-        """Callback disconnessione MQTT"""
+        """Callback disconnessione MQTT - FIXED VERSION"""
         self.state = ConnectionState.DISCONNECTED
         print(f"🔌 MQTT disconnesso (rc: {rc})")
         
-        # 🔧 FIX: Avvia riconnessione automatica in modo thread-safe
+        # 🔧 NUOVO: Gestione riconnessione thread-safe e robusta
         if self._event_loop and not self._event_loop.is_closed():
-            # Siamo in un thread diverso, quindi usiamo call_soon_threadsafe
-            if not self._reconnect_task or self._reconnect_task.done():
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._auto_reconnect(), 
-                        self._event_loop
-                    )
-                    self._reconnect_task = future
-                    print("🔄 Riconnessione automatica avviata (thread-safe)")
-                except Exception as e:
-                    print(f"❌ Errore avvio riconnessione thread-safe: {e}")
+            try:
+                # Cancella task di riconnessione esistente se presente
+                if self._reconnect_task and not self._reconnect_task.done():
+                    self._reconnect_task.cancel()
+                
+                # Avvia nuova riconnessione con call_soon_threadsafe
+                def schedule_reconnect():
+                    try:
+                        self._reconnect_task = asyncio.create_task(self._robust_auto_reconnect())
+                        print("🔄 Riconnessione robusta avviata")
+                    except Exception as e:
+                        print(f"❌ Errore scheduling riconnessione: {e}")
+                
+                self._event_loop.call_soon_threadsafe(schedule_reconnect)
+                
+            except Exception as e:
+                print(f"❌ Errore thread-safe riconnessione: {e}")
         else:
-            print("⚠️ Event loop non disponibile per riconnessione automatica")
+            print("⚠️ Event loop non disponibile per riconnessione")
         
         # Callback utente
         if self.on_disconnected:
@@ -576,105 +582,329 @@ class AsyncMQTTClient:
         except Exception as e:
             print(f"❌ Errore gestione auth response: {e}")
     
-    async def _auto_reconnect(self):
-        """Riconnessione automatica migliorata - Thread-safe"""
+    async def _robust_auto_reconnect(self):
+        """
+        🔧 SISTEMA DI RICONNESSIONE ROBUSTO CON BACKOFF INTELLIGENTE
+        
+        Caratteristiche:
+        - State management thread-safe
+        - Backoff esponenziale con reset temporale
+        - Recovery completo
+        - Gestione outage prolungati
+        """
+        print("🔄 Avvio sistema riconnessione robusto...")
+        
+        # Reset completo stato connessione
+        self.missed_pings = 0
+        self.last_ping_time = 0
+        
+        # Configurazione backoff intelligente
+        initial_delay = self.reconnect_delay  # 2 secondi
+        backoff_delay = initial_delay
+        max_backoff = 60.0  # Max 60 secondi (per outage brevi)
+        extended_max_backoff = 300.0  # Max 5 minuti (per outage lunghi)
+        
+        reconnect_count = 0
+        reconnect_start_time = time.time()
+        last_backoff_reset = time.time()
+        
+        # Soglie temporali per reset backoff
+        short_outage_threshold = 300  # 5 minuti
+        medium_outage_threshold = 1800  # 30 minuti
+        long_outage_threshold = 3600   # 1 ora
+        
         try:
             while self.state == ConnectionState.DISCONNECTED:
                 try:
-                    await asyncio.sleep(self.reconnect_delay)
+                    reconnect_count += 1
+                    current_time = time.time()
+                    outage_duration = current_time - reconnect_start_time
                     
-                    # 🔧 Reset tentativi se sono passati più di 5 minuti dall'ultima connessione
-                    if (time.time() - self.last_connection_time) > self.connection_reset_interval:
-                        if self.connection_attempts >= self.max_retries:
-                            print(f"🔄 Reset tentativi riconnessione dopo {self.connection_reset_interval}s")
-                            self.connection_attempts = 0
+                    # 🧠 LOGICA BACKOFF INTELLIGENTE
+                    current_max_backoff = self._calculate_adaptive_max_backoff(
+                        outage_duration, max_backoff, extended_max_backoff
+                    )
                     
-                    if self.connection_attempts < self.max_retries:
-                        print(f"🔄 Tentativo riconnessione #{self.connection_attempts + 1}/{self.max_retries}")
-                        success = await self.connect()
-                        
-                        if success:
-                            self.stats['reconnections'] += 1
-                            print("✅ Riconnessione automatica riuscita!")
-                            break
+                    # Reset backoff basato su tempo (non solo contatore)
+                    time_since_last_reset = current_time - last_backoff_reset
+                    should_reset_backoff = False
+                    
+                    if outage_duration < short_outage_threshold:
+                        # Outage breve: reset ogni 10 tentativi O ogni 2 minuti
+                        should_reset_backoff = (reconnect_count % 10 == 0 or 
+                                              time_since_last_reset > 120)
+                    elif outage_duration < medium_outage_threshold:
+                        # Outage medio: reset ogni 5 tentativi O ogni 5 minuti  
+                        should_reset_backoff = (reconnect_count % 5 == 0 or 
+                                              time_since_last_reset > 300)
+                    elif outage_duration < long_outage_threshold:
+                        # Outage lungo: reset ogni 3 tentativi O ogni 10 minuti
+                        should_reset_backoff = (reconnect_count % 3 == 0 or 
+                                              time_since_last_reset > 600)
                     else:
-                        print(f"❌ Max tentativi riconnessione raggiunti ({self.max_retries})")
-                        print(f"⏱️ Attendo {self.connection_reset_interval}s prima del reset...")
-                        await asyncio.sleep(self.connection_reset_interval)
-                        self.connection_attempts = 0  # 🔧 Reset per riprovare
-                        print("🔄 Reset tentativi completato, riprovo...")
-                        
-                except Exception as e:
-                    print(f"❌ Errore riconnessione: {e}")
-                    await asyncio.sleep(self.reconnect_delay)
+                        # Outage molto lungo: reset ogni 2 tentativi O ogni 15 minuti
+                        should_reset_backoff = (reconnect_count % 2 == 0 or 
+                                              time_since_last_reset > 900)
                     
-        except asyncio.CancelledError:
-            print("🛑 Riconnessione automatica cancellata")
+                    if should_reset_backoff and reconnect_count > 1:
+                        backoff_delay = initial_delay
+                        last_backoff_reset = current_time
+                        print(f"🔄 Reset backoff dopo {self._format_duration(time_since_last_reset)} (outage: {self._format_duration(outage_duration)})")
+                    
+                    print(f"🔄 Tentativo #{reconnect_count} (delay: {backoff_delay:.1f}s, outage: {self._format_duration(outage_duration)})")
+                    
+                    # Attesa con backoff
+                    await asyncio.sleep(backoff_delay)
+                    
+                    # Verifica se dobbiamo ancora riconnettere
+                    if self.state != ConnectionState.DISCONNECTED:
+                        print("✅ Connessione già ristabilita, interrompo riconnessione")
+                        break
+                    
+                    # PULIZIA COMPLETA del client prima della riconnessione
+                    await self._cleanup_client_for_reconnect()
+                    
+                    # Tentativo di connessione con timeout
+                    self.state = ConnectionState.CONNECTING
+                    print(f"🔌 Tentativo connessione {reconnect_count}...")
+                    
+                    success = await asyncio.wait_for(
+                        self._attempt_connection(),
+                        timeout=15.0  # Timeout di 15 secondi per connessione
+                    )
+                    
+                    if success and self.state == ConnectionState.CONNECTED:
+                        total_outage_time = time.time() - reconnect_start_time
+                        print(f"✅ Riconnessione riuscita dopo {reconnect_count} tentativi!")
+                        print(f"📊 Outage totale: {self._format_duration(total_outage_time)}")
+                        self.stats['reconnections'] += 1
+                        
+                        # Attesa stabilizzazione + verifica subscription
+                        await asyncio.sleep(2)
+                        await self._ensure_subscriptions_active()
+                        
+                        print("🎯 Riconnessione completata con successo!")
+                        break
+                    
+                    else:
+                        print(f"❌ Tentativo {reconnect_count} fallito")
+                        self.state = ConnectionState.DISCONNECTED
+                        
+                        # Backoff esponenziale con jitter e limite adattivo
+                        backoff_delay = min(backoff_delay * 1.5, current_max_backoff)
+                        
+                        # Jitter per evitare thundering herd
+                        jitter_factor = 0.1 + (0.05 * (reconnect_count % 4))  # 10-25% jitter
+                        jitter = backoff_delay * jitter_factor * (1 if reconnect_count % 2 else -1)
+                        backoff_delay = max(initial_delay, backoff_delay + jitter)
+                
+                except asyncio.TimeoutError:
+                    print(f"⏰ Timeout connessione #{reconnect_count}")
+                    self.state = ConnectionState.DISCONNECTED
+                    backoff_delay = min(backoff_delay * 1.2, current_max_backoff)
+                    
+                except asyncio.CancelledError:
+                    print("🛑 Riconnessione cancellata")
+                    break
+                    
+                except Exception as e:
+                    print(f"❌ Errore imprevisto riconnessione #{reconnect_count}: {e}")
+                    self.state = ConnectionState.DISCONNECTED
+                    backoff_delay = min(backoff_delay * 1.3, current_max_backoff)
+                    await asyncio.sleep(1)  # Pausa base in caso di errore
+            
+            print(f"🏁 Sistema riconnessione terminato (stato: {self.state.value})")
+            
         except Exception as e:
-            print(f"❌ Errore critico riconnessione automatica: {e}")
+            print(f"❌ Errore critico sistema riconnessione: {e}")
+            self.state = ConnectionState.ERROR
+    
+    def _calculate_adaptive_max_backoff(self, outage_duration: float, 
+                                      normal_max: float, extended_max: float) -> float:
+        """🧠 Calcola il max backoff adattivo basato sulla durata dell'outage"""
+        if outage_duration < 300:  # < 5 minuti
+            return normal_max  # 60 secondi
+        elif outage_duration < 1800:  # < 30 minuti
+            return normal_max * 1.5  # 90 secondi
+        elif outage_duration < 3600:  # < 1 ora
+            return normal_max * 2  # 120 secondi
+        else:  # > 1 ora
+            return extended_max  # 300 secondi (5 minuti)
+    
+    def _format_duration(self, seconds: float) -> str:
+        """📊 Formatta durata in modo leggibile"""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+    
+    async def _cleanup_client_for_reconnect(self):
+        """🔧 Pulizia completa client prima della riconnessione"""
+        try:
+            if self.client:
+                print("🧹 Pulizia client MQTT...")
+                
+                # Stop loop e disconnetti
+                try:
+                    self.client.loop_stop()
+                    self.client.disconnect()
+                except:
+                    pass  # Ignora errori di disconnessione
+                
+                # Piccola pausa per cleanup
+                await asyncio.sleep(0.5)
+            
+            # Reset contatori
+            self.connection_attempts = 0
+            self.missed_pings = 0
+            
+        except Exception as e:
+            print(f"⚠️ Errore cleanup client: {e}")
+    
+    async def _attempt_connection(self) -> bool:
+        """🔧 Singolo tentativo di connessione atomico"""
+        try:
+            if not self.client:
+                print("❌ Client MQTT non inizializzato per riconnessione")
+                return False
+            
+            # Nuovo client per evitare stati inconsistenti
+            self.client = mqtt.Client()
+            
+            # Riapplica configurazione
+            if self.config.username and self.config.password:
+                self.client.username_pw_set(self.config.username, self.config.password)
+            
+            if self.config.use_tls:
+                import ssl
+                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                self.client.tls_set_context(context)
+            
+            # Riapplica callbacks
+            self.client.on_connect = self._on_connect
+            self.client.on_disconnect = self._on_disconnect
+            self.client.on_message = self._on_message
+            self.client.on_publish = self._on_publish
+            
+            # Connessione
+            result = self.client.connect(self.config.broker, self.config.port, self.config.keep_alive)
+            if result != 0:
+                print(f"❌ Connect return code: {result}")
+                return False
+            
+            # Avvia loop
+            self.client.loop_start()
+            
+            # Attendi connessione con polling
+            for i in range(100):  # 10 secondi max (100 * 0.1)
+                if self.state == ConnectionState.CONNECTED:
+                    return True
+                await asyncio.sleep(0.1)
+            
+            print("⏰ Timeout attesa connessione")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Errore tentativo connessione: {e}")
+            return False
     
     async def _heartbeat_monitor(self):
         """
-        🔧 NUOVO: Monitor heartbeat per rilevare connessioni passive morte.
-        Invia ping periodico e rileva se la connessione è ancora attiva.
+        🔧 MONITOR HEARTBEAT MIGLIORATO
+        Monitor heartbeat che rileva connessioni morte senza interferire con riconnessione.
         """
+        print("💓 Avvio heartbeat monitor...")
+        
         while True:
             try:
                 await asyncio.sleep(self.heartbeat_interval)
                 
-                if self.state == ConnectionState.CONNECTED and self.client:
+                # Solo se connessi e stabile
+                if (self.state == ConnectionState.CONNECTED and 
+                    self.client and 
+                    not (self._reconnect_task and not self._reconnect_task.done())):
+                    
                     current_time = time.time()
                     
-                    # Controlla se è il momento di inviare un ping
+                    # Controlla se è il momento di verificare connessione
                     if (current_time - self.last_ping_time) >= self.heartbeat_interval:
-                        print(f"💓 MQTT ping check...")
+                        print(f"💓 Heartbeat check...")
                         
-                        # Invia un ping (publish su topic speciale o usa keep-alive interno)
                         try:
-                            # Usa metodo interno per verificare se socket è ancora attivo
-                            if hasattr(self.client, '_sock') and self.client._sock:
-                                # Test connessione con un piccolo publish
-                                test_payload = {"ping": current_time, "from": "rfid_gate"}
-                                result = self.client.publish("rfid_gate/heartbeat", json.dumps(test_payload), qos=0)
-                                
-                                if result.rc == 0:
-                                    self.last_ping_time = current_time
-                                    self.missed_pings = 0
-                                    print(f"💓 MQTT ping OK")
-                                else:
-                                    self.missed_pings += 1
-                                    print(f"⚠️ MQTT ping fallito: rc={result.rc} (missed: {self.missed_pings}/{self.max_missed_pings})")
+                            # Test connection con publish a topic di test
+                            test_payload = {
+                                "heartbeat": current_time, 
+                                "from": self.config.broker or "rfid_gate",
+                                "state": "alive"
+                            }
+                            
+                            # Usa timeout per rilevare connessioni morte rapidamente
+                            loop = asyncio.get_event_loop()
+                            result = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    None,
+                                    lambda: self.client.publish(
+                                        "rfid_gate/heartbeat", 
+                                        json.dumps(test_payload), 
+                                        qos=0
+                                    )
+                                ),
+                                timeout=5.0  # 5 secondi timeout
+                            )
+                            
+                            if result.rc == 0:
+                                self.last_ping_time = current_time
+                                self.missed_pings = 0
+                                print(f"💓 Heartbeat OK")
                             else:
-                                # Socket non disponibile
-                                self.missed_pings += 1
-                                print(f"⚠️ MQTT socket non disponibile (missed: {self.missed_pings}/{self.max_missed_pings})")
+                                self._handle_heartbeat_failure(f"publish failed: rc={result.rc}")
                         
-                        except Exception as ping_error:
-                            self.missed_pings += 1
-                            print(f"❌ MQTT ping error: {ping_error} (missed: {self.missed_pings}/{self.max_missed_pings})")
-                        
-                        # Se troppi ping mancati, forza disconnessione
-                        if self.missed_pings >= self.max_missed_pings:
-                            print(f"💔 MQTT connessione morta rilevata! Forzo disconnessione...")
-                            self.state = ConnectionState.DISCONNECTED
-                            
-                            # Forza disconnessione del client
-                            if self.client:
-                                try:
-                                    self.client.disconnect()
-                                except:
-                                    pass
-                            
-                            # Avvia riconnessione se non già attiva
-                            if not self._reconnect_task or self._reconnect_task.done():
-                                self._reconnect_task = asyncio.create_task(self._auto_reconnect())
-                                
+                        except asyncio.TimeoutError:
+                            self._handle_heartbeat_failure("publish timeout")
+                        except Exception as e:
+                            self._handle_heartbeat_failure(f"publish error: {e}")
+                
+                elif self.state == ConnectionState.CONNECTING:
+                    print("💓 Heartbeat in pausa - riconnessione in corso...")
+                
             except asyncio.CancelledError:
                 print("🛑 Heartbeat monitor fermato")
                 break
             except Exception as e:
                 print(f"❌ Errore heartbeat monitor: {e}")
-                await asyncio.sleep(5)  # Breve pausa in caso di errore
+                await asyncio.sleep(5)  # Pausa in caso di errore
+    
+    def _handle_heartbeat_failure(self, reason: str):
+        """🔧 Gestisce fallimento heartbeat senza forzare disconnessione immediata"""
+        self.missed_pings += 1
+        print(f"⚠️ Heartbeat fallito: {reason} (missed: {self.missed_pings}/{self.max_missed_pings})")
+        
+        # Solo dopo diversi fallimenti forza disconnessione
+        if self.missed_pings >= self.max_missed_pings:
+            print(f"💔 Connessione considerata morta dopo {self.missed_pings} heartbeat falliti")
+            
+            # Forza disconnessione solo se non c'è già riconnessione attiva
+            if not (self._reconnect_task and not self._reconnect_task.done()):
+                print("🔌 Forzo disconnessione per connessione morta...")
+                
+                try:
+                    # Cambia stato prima per evitare loop
+                    self.state = ConnectionState.DISCONNECTED
+                    
+                    # Disconnetti client
+                    if self.client:
+                        self.client.disconnect()
+                        
+                except Exception as e:
+                    print(f"❌ Errore forzatura disconnessione: {e}")
+            else:
+                print("🔄 Riconnessione già attiva, heartbeat non interviene")
     
     async def _process_queue(self):
         """Processore coda messaggi"""
